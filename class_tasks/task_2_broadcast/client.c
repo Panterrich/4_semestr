@@ -31,6 +31,7 @@ enum ERRORS
     ERROR_READ            = -8,
     ERROR_BIND            = -9,
     ERROR_RECVFROM        = -10,
+    ERROR_SETSOCKOPT      = -11,
 };
 
 int client_udp_interface(in_addr_t address, in_port_t port);
@@ -68,6 +69,18 @@ int client_udp_interface(in_addr_t address, in_port_t port)
         return  ERROR_SOCKET;
     }
 
+    int reuse = 1;
+    int broadcast = 1;
+    struct timeval time = {.tv_sec = 120};
+
+    if ((setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(int)) == -1) ||
+        (setsockopt(client_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(int)) == -1) ||
+        (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO,  &time,      sizeof(time)) == -1))
+    {
+        perror("ERROR: setsockopt()");
+        return  ERROR_SETSOCKOPT;
+    }
+
     struct sockaddr_in client_addr = {.sin_family = AF_INET, .sin_addr.s_addr = address, .sin_port = port};
 
     if (bind(client_socket, (struct sockaddr*)&client_addr, sizeof(struct sockaddr_in)) == -1)
@@ -75,6 +88,7 @@ int client_udp_interface(in_addr_t address, in_port_t port)
         perror("ERROR: bind()");
         return  ERROR_BIND;
     }
+
 
     struct sockaddr_in server = {};
     socklen_t server_len = sizeof(server);

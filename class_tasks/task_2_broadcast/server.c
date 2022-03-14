@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
 
     address.sin_port = htons(atoi(argv[2]));
 
-    return broadcast_server_interface(address.sin_addr.s_addr, address.sin_port, INADDR_BROADCAST, htons(27312));
+    return broadcast_server_interface(address.sin_addr.s_addr, address.sin_port, INADDR_BROADCAST, htons(35000));
 }
 
 int broadcast_server_interface(in_addr_t address, in_port_t port, in_addr_t broadcast_address, in_port_t broadcast_port)
@@ -96,8 +96,8 @@ int broadcast_server_interface(in_addr_t address, in_port_t port, in_addr_t broa
     }
 
     struct sockaddr_in server = {.sin_family = AF_INET, .sin_addr.s_addr = address, .sin_port = port};
-
     struct sockaddr_in client = {.sin_family = AF_INET, .sin_addr.s_addr = broadcast_address, .sin_port = broadcast_port};
+
     socklen_t client_len = sizeof(client);
 
     if (bind(server_socket, (struct sockaddr*)&server, sizeof(struct sockaddr_in)) == -1)
