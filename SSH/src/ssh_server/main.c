@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 
         if (result) 
         {
-             syslog(LOG_NOTICE, "daemon POWER[%d] has been stopped, error broadcast", getpid());
+             syslog(LOG_NOTICE, "daemon POWER[%d] has been stopped, error broadcast %d", getpid(), result);
             return result;
         }
 
@@ -155,8 +155,8 @@ int broadcast_server_udp_interface(in_addr_t address, in_port_t port)
     struct timeval time = {.tv_sec = 120};
 
     if ((setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(reuse))     == -1) ||
-        (setsockopt(server_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)  == -1) ||
-        (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO,  &time,      sizeof(time))      == -1)))
+        (setsockopt(server_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) ||
+        (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO,  &time,      sizeof(time))      == -1))
     {
         perror("ERROR: setsockopt()");
         return  ERROR_SETSOCKOPT;
