@@ -143,7 +143,7 @@ int broadcast_client_interface(in_addr_t address, in_port_t port, in_addr_t broa
 
         buffer[read_size] = '\0';
 
-        if (strcmp(buffer, "Hi, Makima!") == 0)
+        if (!errno && strcmp(buffer, "Hi, Makima!") == 0)
         {
             printf("The response was received from %s:%d \n", inet_ntoa(((struct sockaddr_in*)&server)->sin_addr), ntohs(((struct sockaddr_in*)&server)->sin_port));
         }
