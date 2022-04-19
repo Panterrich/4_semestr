@@ -40,6 +40,7 @@ set(SSH_SERVER_CONTROLLER_NAME "ssh_server_controller")
 
 set(SSH_CLIENT_SRC
     src/ssh_client/main.c
+    src/ssh_client/ssh_client.c
 )  
 
 set(SSH_SERVER_SRC
@@ -57,9 +58,9 @@ add_executable(${SSH_CLIENT_NAME}            ${SSH_CLIENT_SRC})
 add_executable(${SSH_SERVER_NAME}            ${SSH_SERVER_SRC})
 add_executable(${SSH_SERVER_CONTROLLER_NAME} ${SSH_SERVER_CONTROLLER_SRC})
 
-target_include_directories(${SSH_CLIENT_NAME}            PRIVATE src/logger src/include)
-target_include_directories(${SSH_SERVER_NAME}            PRIVATE src/logger src/include)
-target_include_directories(${SSH_SERVER_CONTROLLER_NAME} PRIVATE src/logger src/include)
+target_include_directories(${SSH_CLIENT_NAME}            PRIVATE src/logger src/include src/hashtable)
+target_include_directories(${SSH_SERVER_NAME}            PRIVATE src/logger src/include src/hashtable)
+target_include_directories(${SSH_SERVER_CONTROLLER_NAME} PRIVATE src/logger src/include src/hashtable)
 
 #########################################################################
 

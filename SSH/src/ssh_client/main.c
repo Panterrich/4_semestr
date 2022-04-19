@@ -1,154 +1,98 @@
-#include <stdio.h>    
-#include <stdlib.h>  
-#include <unistd.h>
-#include <signal.h>
-#include <sys/stat.h>
-#include <syslog.h>
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/file.h>
-#include <dirent.h>
-#include <sys/time.h>
-#include <utime.h>
-#include <limits.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <wait.h>
-#include <arpa/inet.h>
-
-#define MAX_LEN 1000
-
-int exit_loop = 0;
-
-void sig_alrm_handler(int signum)
-{
-    exit_loop = 1;
-}
-
-enum ERRORS
-{
-    ERROR_INVALID_ARGC    = -1,
-    ERROR_INVALID_ARGV    = -2,
-    ERROR_OPEN            = -3,
-    ERROR_SOCKET          = -4,
-    ERROR_CONNECT         = -5,
-    ERROR_SEND            = -6,
-    ERROR_INVALID_ADDRESS = -7,
-    ERROR_READ            = -8,
-    ERROR_BIND            = -9,
-    ERROR_RECVFROM        = -10,
-    ERROR_SETSOCKOPT      = -11,
-    ERROR_SIGACTION       = -12,
-};
-
-int broadcast_client_interface(in_addr_t address, in_port_t port, in_addr_t broadcast_address, in_port_t broadcast_port);
+#include "ssh_client.h"
 
 int main(int argc, char* argv[])
 {
-    if (argc != 3)
+    if (argc < 2)
     {
-        printf("Please, run the program in the following format: \n"
-               "./client <host> <port>\n");
-        return ERROR_INVALID_ARGC;
+        help_message();
+        return 0;
     }
 
-    struct sockaddr_in address = {};
+    int i = 1;
+    int bytemask = 0;
 
-    if (inet_ntop(AF_INET, &address.sin_addr, argv[1], strlen(argv[1])) == NULL)
+    int   port     = BROADCAST_PORT;
+    char* file_log = NULL;
+
+    while (i < argc)
     {
-        printf("Please, run the program in the following format: \n"
-               "./client <host> <port>\n");
-        return ERROR_INVALID_ADDRESS;
+        if (!(strcmp(argv[i], "--help") && (strcmp(argv[i], "-h"))))
+        {
+            bytemask |= 0x00000001;
+            break;
+        }
+        
+        if (!(strcmp(argv[i], "--broadcast") && (strcmp(argv[i], "-b"))))
+        {
+            bytemask |= 0x00000002;
+            i++;
+
+            if (i < argc)
+            {
+                port = atoi(argv[i]);
+
+                if (!port)
+                {
+                    port = BROADCAST_PORT;
+                }
+            }
+
+            return broadcast_client_interface(INADDR_ANY, htons(port));
+        }
+
+        if (!(strcmp(argv[i], "--history")))
+        {
+            return print_ssh_history();
+        }
+        
     }
 
-    address.sin_port = htons(atoi(argv[2]));
-
-    return broadcast_client_interface(address.sin_addr.s_addr, address.sin_port, INADDR_BROADCAST, htons(35000));
+    return 0; 
 }
 
-
-int broadcast_client_interface(in_addr_t address, in_port_t port, in_addr_t broadcast_address, in_port_t broadcast_port)
+int print_ssh_history()
 {
-    int client_socket = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    int fd = open(DEFAULT_HISTORY, O_RDONLY | O_LARGEFILE);
 
-    if (client_socket == -1)
+    if (fd == -1)
     {
-        perror("ERROR: socket()");
-        return  ERROR_SOCKET;
+        printf("Server history not found. See \'ssh_client --help\'\n");
+        return ERROR_OPEN;
     }
 
-    int reuse = 1;
-    int broadcast = 1;
-    struct timeval time = {.tv_sec = 15};
-
-    if ((setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(int)) == -1) ||
-        (setsockopt(client_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(int)) == -1) ||
-        (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO,  &time,      sizeof(time)) == -1))
+    size_t size = file_size(fd);
+    if (!size) 
     {
-        perror("ERROR: setsockopt()");
-        return  ERROR_SETSOCKOPT;
+        close(fd);
+        return ERROR_OPEN;
     }
 
-    struct sockaddr_in client = {.sin_family = AF_INET, .sin_addr.s_addr = address, .sin_port = port};
-
-    if (bind(client_socket, (struct sockaddr*)&client, sizeof(struct sockaddr_in)) == -1)
+    char* buffer = (char*) calloc(size, sizeof(char));
+    if (!buffer) 
     {
-        perror("ERROR: bind()");
-        return  ERROR_BIND;
+        close(fd);
+        return ERROR_ALLOCATE;
     }
 
-    struct sockaddr_in server = {.sin_family = AF_INET, .sin_addr.s_addr = broadcast_address, .sin_port = broadcast_port};
-    socklen_t server_len = sizeof(server);
-
-    static const char message[] = "Hi, POWER!";
-
-    int data = sendto(client_socket, message, sizeof(message), 0, (struct sockaddr*)&server, sizeof(server));
-
-    if (data == -1)
+    if (read(fd, buffer, size) != size)
     {
-        perror("ERROR: send()");
-        return  ERROR_SEND;
+        close(fd);
+        free(buffer);
+        perror("ERROR: read():");
+        return  ERROR_READ;
     }
 
-    char buffer[MAX_LEN] = "";
+    close(fd);
 
-    static int delay = 10;
-    sigset_t sig = {};
-    sigemptyset(&sig);
-    sigaddset(&sig, SIGALRM);
-    struct sigaction sig_handler = {.__sigaction_handler = {sig_alrm_handler}, .sa_mask = sig};
-
-    if (sigaction(SIGALRM, &sig_handler, NULL) == -1)
-    {
-        close(client_socket);
-
-        perror("ERROR: sigaction()");
-        return  ERROR_SIGACTION;
+    if (write(STDOUT_FILENO, buffer, size) == -1)
+    {   
+        free(buffer);
+        perror("ERROR: write():");
+        return  ERROR_WRITE;
     }
 
-    exit_loop = 0;
-    alarm(delay);
-
-    while (!exit_loop)
-    {
-        int read_size = recvfrom(client_socket, buffer, MAX_LEN - 1, 0, (struct sockaddr*)&server, &server_len);
-
-        if (read_size == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
-        {
-            perror("ERROR: recvfrom()");
-            close(client_socket);
-            return  ERROR_RECVFROM;
-        }
-
-        buffer[read_size] = '\0';
-
-        if (!errno && strcmp(buffer, "Hi, Makima!") == 0)
-        {
-            printf("The response was received from %s:%d \n", inet_ntoa(((struct sockaddr_in*)&server)->sin_addr), ntohs(((struct sockaddr_in*)&server)->sin_port));
-        }
-    }
-
-    printf("Finished\n");
+    free(buffer);
     return 0;
 }
+
+
