@@ -1,7 +1,9 @@
 #ifndef DAEMON_H
 #define DAEMON_H
 
+#define _GNU_SOURCE
 #define _LARGEFILE64_SOURCE
+#define __USE_FILE_OFFSET64
 
 #include <stdio.h>    
 #include <stdlib.h>  
@@ -19,10 +21,8 @@
 #include <wait.h>
 #include <limits.h>
 #include <time.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <wait.h>
-#include <arpa/inet.h>
+
 
 #define MAX_LEN 4096
 

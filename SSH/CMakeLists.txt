@@ -10,6 +10,7 @@ project ("SSH" LANGUAGES C)
 
 # COMPILE OPTIONS
 add_compile_options(
+    -pthread
     -Wall
 
     # -Wno-pointer-to-int-cast
@@ -44,8 +45,9 @@ set(SSH_CLIENT_SRC
 )  
 
 set(SSH_SERVER_SRC
-   src/ssh_server/daemon.c
-   src/ssh_server/main.c
+    src/ssh_server/ssh_server.c
+    src/ssh_server/daemon.c
+    src/ssh_server/main.c
 )   
 
 set(SSH_SERVER_CONTROLLER_SRC
