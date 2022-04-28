@@ -37,6 +37,7 @@ enum RUDP_ERRORS
     RUDP_EXCEEDED_N_ATTEMPTS = -12,
     RUDP_FORK                = -13,
     RUDP_CLOSE_CONNECTION    = -14,
+    RUDP_LISTEN              = -15,
 };
 
 enum RUDP_PACKET_FLAGS
@@ -55,6 +56,7 @@ struct rudp_header
 };
 
 #define N_ATTEMPT     3
+#define SIZE_QUEUE    100
 #define ACK_TIME      5
 #define STANTARD_TIME 1200
 #define MAX_ANSWER    sizeof(struct rudp_header)

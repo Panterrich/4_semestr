@@ -1,4 +1,5 @@
 #include "daemon.h"
+#define MAX_LEN 4096
 
 int fd_pid = 0;
 int fd_fifo = 0;

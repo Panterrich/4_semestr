@@ -29,86 +29,88 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // sigset_t sig = {};
-    // sigmask_configuration(&sig);
+    sigset_t sig = {};
+    sigmask_configuration(&sig);
 
-    // sigdelset(&sig, SIGCHLD);
+    sigdelset(&sig, SIGCHLD);
 
-    // int signum = 0;
-    // siginfo_t info = {};
+    int signum = 0;
+    siginfo_t info = {};
 
-    // int run = 1;
+    int run = 1;
+    int result = 0;
 
     while (1)
-    {
+    {   
         broadcast_server_udp_interface(address.sin_addr.s_addr, address.sin_port);
 
-        // if (result) 
-        // {
-        //     syslog(LOG_NOTICE, "daemon POWER[%d] has been stopped, error broadcast %d", getpid(), result);
-        //     return result;
-        // }
+        if (result) 
+        {
+            syslog(LOG_NOTICE, "daemon POWER[%d] has been stopped, error broadcast %d", getpid(), result);
+            return result;
+        }
 
-        // signum = sigwaitinfo(&sig, &info);
+        signum = sigwaitinfo(&sig, &info);
 
-        // switch (signum)
-        // {
-        //     case SIGUSR1:
-        //     {
-        //         if (info.si_int == -1)
-        //         {
-        //             info.si_int = 0;
-        //             syslog(LOG_NOTICE, "controller check this demon");
-        //             break;
-        //         }
-        //     }
-        //     break;
+        switch (signum)
+        {
+            case SIGUSR1:
+            {
+                if (info.si_int == -1)
+                {
+                    info.si_int = 0;
+                    syslog(LOG_NOTICE, "controller check this demon");
+                    break;
+                }
+            }
+            break;
 
-        //     case SIGUSR2:
-        //     {
-        //         syslog(LOG_NOTICE, "controller send SIGUSR2");
-        //     }
-        //     break;
+            case SIGUSR2:
+            {
+                syslog(LOG_NOTICE, "controller send SIGUSR2");
+            }
+            break;
 
-        //     case SIGHUP:
-        //     {
-        //         syslog(LOG_NOTICE, "controller send SIGHUP");
-        //     }
-        //     break;
+            case SIGHUP:
+            {
+                syslog(LOG_NOTICE, "controller send SIGHUP");
+            }
+            break;
 
-        //     case SIGQUIT:
-        //     case SIGTERM:
-        //     {
-        //         syslog(LOG_NOTICE, "terminated");
-        //         shutdown_demon(signum);
-        //     }
-        //     break;
+            case SIGQUIT:
+            case SIGTERM:
+            {
+                syslog(LOG_NOTICE, "terminated");
+                shutdown_demon(signum);
+            }
+            break;
 
-        //     case SIGINT:
-        //     {
-        //         if (run)
-        //         {
-        //             syslog(LOG_NOTICE, "daemon POWER[%d] has been stopped", getpid());
-        //         }
-        //         else
-        //         {
-        //             syslog(LOG_NOTICE, "daemon POWER[%d] has been started", getpid());
-        //         }
+            case SIGINT:
+            {
+                if (run)
+                {
+                    syslog(LOG_NOTICE, "daemon POWER[%d] has been stopped", getpid());
+                }
+                else
+                {
+                    syslog(LOG_NOTICE, "daemon POWER[%d] has been started", getpid());
+                }
 
-        //         run = !run;
-        //     }
-        //     break;
+                run = !run;
+            }
+            break;
 
-        //     case SIGCHLD:
-        //     break;
+            case SIGCHLD:
+            break;
 
-        //     default:
-        //         syslog(LOG_WARNING, "undefined signal");
-        //         break;
-        // }
+            default:
+                syslog(LOG_WARNING, "undefined signal");
+                break;
+        }
     }
 
-    
+    syslog(LOG_NOTICE, "daemon POWER[%d] started", getpid());
+    ssh_server(INADDR_ANY, htons(TCP_LISTEN_PORT), SOCK_STREAM);
     syslog(LOG_NOTICE, "finished");
     closelog();
 

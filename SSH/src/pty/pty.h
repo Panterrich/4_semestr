@@ -1,6 +1,8 @@
 #ifndef PTY_H
 #define PTY_H
 
+#define _GNU_SOURCE
+
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -10,7 +12,7 @@
 #include <string.h>
 #include <errno.h>
 
-enum ERRORS
+enum PTY_ERRORS
 {
     ERROR_POSIX_OPENPT = -1,
     ERROR_GRANTPT      = -2,

@@ -23,12 +23,16 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 //============================================================================================
 
 #define MAX_LEN 1000
+#define MAX_BUFFER (2 << 20)
 
-#define BROADCAST_PORT 35000
+#define UDP_LISTEN_PORT 33000
+#define TCP_LISTEN_PORT 34000
+#define BROADCAST_PORT  35000
 
 //============================================================================================
 
@@ -54,5 +58,7 @@ void sigchild_handler(int s);
 int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast_port);
 
 int broadcast_socket_configuration(in_addr_t address, in_port_t port);
+
+int ssh_server(in_addr_t address, in_port_t port, int type_connection);
 
 #endif // SSH_SERVER_H

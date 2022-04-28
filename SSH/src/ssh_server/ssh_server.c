@@ -1,4 +1,6 @@
 #include "ssh_server.h"
+#include "pty.h"
+#include "rudp.h"
 
 void sigchild_handler(int s)
 {
@@ -92,4 +94,117 @@ int broadcast_socket_configuration(in_addr_t address, in_port_t port)
     }
 
     return server_socket;
+}
+
+int ssh_server(in_addr_t address, in_port_t port, int type_connection)
+{
+    if (type_connection == SOCK_STREAM)
+    {
+        struct timeval time = {.tv_sec = STANTARD_TIME};
+        int socket = rudp_socket(INADDR_ANY, port, time, SOCK_STREAM);
+        if (socket < 0) return RUDP_SOCKET;
+
+        syslog(LOG_NOTICE, "daemon POWER[%d] rudp_socket created port %d", getpid(), ntohs(port));
+
+        int result = listen(socket, SIZE_QUEUE);
+        if (result == -1) return RUDP_LISTEN;
+
+        syslog(LOG_NOTICE, "daemon POWER[%d] rudp_socket listened", getpid());
+
+
+        struct sockaddr_in client = {};
+
+        while (1)
+        {
+            int accepted_socket = rudp_accept(socket, &client, SOCK_STREAM, NULL);
+            syslog(LOG_NOTICE, "daemon POWER[%d] %d", getpid(), accepted_socket);
+            if (accepted_socket < 0) return RUDP_ACCEPT;
+
+            if (accepted_socket > 0)
+            {   
+                syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
+                char buff[MAX_BUFFER] = "";
+                char slave[MAX_LEN] = "";
+
+                int master_fd = 0;
+                struct termios term = {};
+                cfmakeraw(&term);
+
+                pid_t pid = pty_fork(&master_fd, slave, MAX_LEN, &term, NULL);
+                if (pid < 0) syslog(LOG_ERR, "[RUDP] pty_fork pid = %d, errno = %d", pid, errno);
+                if (pid == 0)
+                {
+                    syslog(LOG_INFO, "[RUDP] server bash errno = %d", errno);
+                    char* bash_argv[] = {"bash", NULL};
+                    execvp("bash", bash_argv);
+                }
+
+                struct pollfd master = {.fd = master_fd, .events = POLL_IN};
+
+                size_t n_write = 0;
+                size_t n_read  = 0;
+
+                while (1)
+                {
+                    int event = poll(&master, 1, 100);
+                    if (event > 0)
+                    {
+                        n_read = read(master_fd, buff, sizeof(buff));
+                        if (n_read == -1)
+                        {
+                            perror("read");
+                            return -1;
+                        }
+
+                        syslog(LOG_INFO, "[RUDP] server read errno = %d", errno);
+
+                        
+                        n_write = rudp_send(socket, buff, n_read, NULL, SOCK_STREAM, NULL);
+                        if (n_write == -1)
+                        {
+                            perror("rudp_recv(SOCK_STREAM)");
+                            return -1;
+                        }
+
+                        syslog(LOG_INFO, "[RUDP] server send errno = %d", errno);
+                    }
+                    else if (event == 0)
+                    {
+                        n_read = rudp_recv(socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                        if (n_read == -1)
+                        {
+                            perror("rudp_send(SOCK_STREAM)");
+                            return -1;
+                        }
+                        syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
+
+                        n_write = write(master_fd, buff, n_read);
+                        if (n_write == -1)
+                        {
+                            perror("write()");
+                            return -1;
+                        }     
+
+                        syslog(LOG_INFO, "[RUDP] server write errno = %d", errno);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                return 0;
+            }
+        }
+
+        return 0;
+
+    } else if (type_connection == SOCK_DGRAM)
+    {
+        return 0;
+    }
+    else
+    {
+        return RUDP_UNDEFINED_TYPE;
+    }
 }

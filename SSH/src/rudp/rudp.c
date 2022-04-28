@@ -56,9 +56,7 @@ int rudp_recv(int socket, void* message, size_t length, struct sockaddr_in* addr
               int type_connection, struct rudp_header* control)
 {
     if (type_connection == SOCK_STREAM)
-    {
-        socklen_t socklen = sizeof(struct sockaddr_in);
-    
+    {    
         int len = recv(socket, message, length, 0);
         if (len == -1 && errno == EAGAIN)
         {

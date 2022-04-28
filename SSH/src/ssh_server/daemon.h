@@ -24,9 +24,6 @@
 #include <wait.h>
 
 
-#define MAX_LEN 4096
-
-
 //=========================================================================================
 
 int daemonize(char* name, char* path, char* in_file, char* out_file, char* err_file);

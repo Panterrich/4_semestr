@@ -25,12 +25,16 @@
 #include <wait.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <pthread.h>
+#include <poll.h>
 
 #define MAX_LEN 1000
 #define MAX_SERVERS 100
+#define MAX_BUFFER (2 << 20)
 
-#define CLIENT_PORT     28000
 #define BROADCAST_PORT  35000
+#define TCP_LISTEN_PORT 34000
+#define UDP_LISTEN_PORT 33000
 #define DEFAULT_LOG     "/tmp/.ssh-log"
 #define DEFAULT_HISTORY "/tmp/.ssh-history"
 
@@ -57,6 +61,7 @@ void help_message();
 
 int print_ssh_history();
 
+int ssh_client(in_addr_t address, char* username, int type_connection);
 
 //=====================================================================================================
 

@@ -10,7 +10,7 @@ project ("SSH" LANGUAGES C)
 
 # COMPILE OPTIONS
 add_compile_options(
-    -pthread
+    -lpthread
     -Wall
 
     # -Wno-pointer-to-int-cast
@@ -48,6 +48,7 @@ set(SSH_SERVER_SRC
     src/ssh_server/ssh_server.c
     src/ssh_server/daemon.c
     src/ssh_server/main.c
+    
 )   
 
 set(SSH_SERVER_CONTROLLER_SRC
@@ -55,14 +56,19 @@ set(SSH_SERVER_CONTROLLER_SRC
     src/ssh_server_controller/main.c
 )   
 
+add_library(rudp STATIC src/pty/pty.c src/rudp/rudp.c)
+
 # EXECUTABLE FILES
 add_executable(${SSH_CLIENT_NAME}            ${SSH_CLIENT_SRC})
 add_executable(${SSH_SERVER_NAME}            ${SSH_SERVER_SRC})
 add_executable(${SSH_SERVER_CONTROLLER_NAME} ${SSH_SERVER_CONTROLLER_SRC})
 
-target_include_directories(${SSH_CLIENT_NAME}            PRIVATE src/logger src/include src/hashtable)
-target_include_directories(${SSH_SERVER_NAME}            PRIVATE src/logger src/include src/hashtable)
-target_include_directories(${SSH_SERVER_CONTROLLER_NAME} PRIVATE src/logger src/include src/hashtable)
+target_link_libraries(${SSH_CLIENT_NAME} rudp)
+target_link_libraries(${SSH_SERVER_NAME} rudp)
+
+target_include_directories(${SSH_CLIENT_NAME}            PRIVATE src/logger src/include src/hashtable src/pty src/rudp)
+target_include_directories(${SSH_SERVER_NAME}            PRIVATE src/logger src/include src/hashtable src/pty src/rudp)
+target_include_directories(${SSH_SERVER_CONTROLLER_NAME} PRIVATE src/logger src/include src/hashtable src/pty src/rudp)
 
 #########################################################################
 

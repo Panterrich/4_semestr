@@ -1,7 +1,7 @@
 #include "ssh_client.h"
 
 int main(int argc, char* argv[])
-{
+{   
     if (argc < 2)
     {
         help_message();
@@ -9,10 +9,12 @@ int main(int argc, char* argv[])
     }
 
     int i = 1;
-    int bytemask = 0;
+    unsigned int bytemask = 0;
 
-    int   port     = BROADCAST_PORT;
-    char* file_log = NULL;
+    in_port_t broad_port      = BROADCAST_PORT;
+    char* file_log            = NULL;
+    in_addr_t addr            = 0;
+    char username [MAX_INPUT] = "";
 
     while (i < argc)
     {
@@ -29,70 +31,101 @@ int main(int argc, char* argv[])
 
             if (i < argc)
             {
-                port = atoi(argv[i]);
+                broad_port = atoi(argv[i]);
 
-                if (!port)
+                if (!broad_port)
                 {
-                    port = BROADCAST_PORT;
+                    broad_port = BROADCAST_PORT;
                 }
             }
-
-            return broadcast_client_interface(INADDR_ANY, htons(port));
         }
 
         if (!(strcmp(argv[i], "--history")))
         {
-            return print_ssh_history();
+            bytemask |= 0x00000004;
+            i++;
         }
-        
+
+        if (!(strcmp(argv[i], "--ssh")  && strcmp(argv[i], "-s")))
+        {
+            bytemask |= 0x00000008;
+            i++;
+
+            if (i < argc)
+            {
+                char* address = strchr(argv[i], '@');
+                if (address == NULL)
+                {
+                    help_message();
+                    return -1;
+                }
+                address++;         
+                
+                addr = inet_addr(address);
+                if (addr == INADDR_NONE)
+                {
+                    help_message();
+                    return -1;
+                }
+
+                strncpy(username, argv[i], address - 1 - argv[i]);
+                i++;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+    }
+
+    int error = 0;
+    unsigned int comand = bytemask;
+
+    while (bytemask)
+    {
+        error += (bytemask & 1);
+        bytemask >>= 1;
+    }
+
+    if (error > 1) 
+    {
+        help_message();
+        return -1;
+    }
+
+    switch (comand)
+    {
+        case 0x00000001:
+        {
+            help_message();
+            break;
+        }
+
+        case 0x00000002:
+        {
+            return broadcast_client_interface(INADDR_ANY, htons(broad_port));
+            break;
+        }
+
+        case 0x00000004:
+        {
+            return print_ssh_history();
+            break;
+        }
+
+        case 0x00000008:
+        {
+            return ssh_client(addr, username, SOCK_STREAM);
+            break;
+        }
+    
+        default:
+        {
+            help_message();
+            break;
+        }
     }
 
     return 0; 
 }
-
-int print_ssh_history()
-{
-    int fd = open(DEFAULT_HISTORY, O_RDONLY | O_LARGEFILE);
-
-    if (fd == -1)
-    {
-        printf("Server history not found. See \'ssh_client --help\'\n");
-        return ERROR_OPEN;
-    }
-
-    size_t size = file_size(fd);
-    if (!size) 
-    {
-        close(fd);
-        return ERROR_OPEN;
-    }
-
-    char* buffer = (char*) calloc(size, sizeof(char));
-    if (!buffer) 
-    {
-        close(fd);
-        return ERROR_ALLOCATE;
-    }
-
-    if (read(fd, buffer, size) != size)
-    {
-        close(fd);
-        free(buffer);
-        perror("ERROR: read():");
-        return  ERROR_READ;
-    }
-
-    close(fd);
-
-    if (write(STDOUT_FILENO, buffer, size) == -1)
-    {   
-        free(buffer);
-        perror("ERROR: write():");
-        return  ERROR_WRITE;
-    }
-
-    free(buffer);
-    return 0;
-}
-
 
