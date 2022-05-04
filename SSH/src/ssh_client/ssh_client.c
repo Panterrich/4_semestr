@@ -43,12 +43,13 @@ int broadcast_client_interface(in_addr_t address_client, in_port_t broadcast_por
 
     static const char message[] = "Hi, POWER!";
 
-    struct sockaddr_in server = {.sin_family = AF_INET, .sin_addr.s_addr = INADDR_BROADCAST, .sin_port = broadcast_port};
+    struct sockaddr_in server = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_BROADCAST), .sin_port = broadcast_port};
     socklen_t server_len = sizeof(server);
 
     int data = sendto(client_socket, message, sizeof(message), 0, (struct sockaddr*)&server, sizeof(server));
     if (data == -1)
     {
+        fprintf(stderr, "ERROR: send() %d: %s\n", errno, strerror(errno));
         perror("ERROR: send()");
         return  ERROR_SEND;
     }
@@ -121,23 +122,10 @@ int broadcast_client_interface(in_addr_t address_client, in_port_t broadcast_por
 int broadcast_socket_configuration(in_addr_t address_client)
 {
     int client_socket = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
-
     if (client_socket == -1)
     {
         perror("ERROR: socket()");
         return  ERROR_SOCKET;
-    }
-
-    int reuse = 1;
-    int broadcast = 1;
-    struct timeval timer = {.tv_sec = 15};
-
-    if ((setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(int)) == -1) ||
-        (setsockopt(client_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(int)) == -1) ||
-        (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO,  &timer,     sizeof(timer)) == -1))
-    {
-        perror("ERROR: setsockopt()");
-        return  ERROR_SETSOCKOPT;
     }
 
     struct sockaddr_in client = {.sin_family = AF_INET, .sin_addr.s_addr = address_client, .sin_port = 0};
@@ -146,6 +134,18 @@ int broadcast_socket_configuration(in_addr_t address_client)
     {
         perror("ERROR: bind()");
         return  ERROR_BIND;
+    }
+
+    int reuse = 1;
+    int broadcast = 1;
+    struct timeval timer = {.tv_sec = 15};
+
+    if ((setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(int))   == -1) ||
+        (setsockopt(client_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(int))   == -1) ||
+        (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO,  &timer,     sizeof(timer)) == -1))
+    {
+        perror("ERROR: setsockopt()");
+        return  ERROR_SETSOCKOPT;
     }
 
     return client_socket;
@@ -301,12 +301,14 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                                   .sin_port = (type_connection == SOCK_STREAM) ? htons(TCP_LISTEN_PORT) : htons(UDP_LISTEN_PORT)};
     struct sockaddr_in connected_address = {};
 
-    struct termios terminal;
-    tcgetattr(STDIN_FILENO, &terminal);
-    terminal.c_cc[VINTR] = 0;
-    terminal.c_cc[VSUSP] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &terminal);
-
+    struct termios term = {};
+    cfmakeraw(&term);
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &term) == -1)
+    {
+        perror("tcsetattr()");
+        return ERROR_TCSETATTR;
+    }
+    
     char buff[MAX_BUFFER] = "";
 
     struct timeval time = {.tv_sec = STANTARD_TIME};   
@@ -325,6 +327,7 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
     size_t n_write = 0;
     size_t n_read  = 0;
 
+ 
     while (1)
     {
         int event = poll(&master, 1, 100);
@@ -368,8 +371,8 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                 return -1;
             }
 
-            if (!strncmp(buff, "exit", 4)) break;
-
+            if (*buff == 4) break;
+            
             if (type_connection == SOCK_STREAM)
             {
                 n_write = rudp_send(socket, buff, n_read, NULL, SOCK_STREAM, NULL);

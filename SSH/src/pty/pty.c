@@ -8,21 +8,21 @@ int pty_master_open(char* slave_name, size_t slave_name_len)
     if (master_fd == -1) 
     {
         perror("ERROR: posix_openpt()");
-        return  ERROR_POSIX_OPENPT;
+        return  ERROR_PTY_POSIX_OPENPT;
     }
     
     if (grantpt(master_fd) == -1)
     {
         perror("ERROR: grantpt()");
         close(master_fd);
-        return  ERROR_GRANTPT;       
+        return  ERROR_PTY_GRANTPT;       
     }
 
     if (unlockpt(master_fd) == -1)
     {
         perror("ERROR: unlockpt()");
         close(master_fd);
-        return  ERROR_UNLOCKPT;
+        return  ERROR_PTY_UNLOCKPT;
     }
 
     char* pathname = ptsname(master_fd);
@@ -30,7 +30,7 @@ int pty_master_open(char* slave_name, size_t slave_name_len)
     {
         perror("ERROR: ptsname()");
         close(master_fd);
-        return  ERROR_PTSNAME;
+        return  ERROR_PTY_PTSNAME;
     }
 
     if (strlen(pathname) < slave_name_len)
@@ -42,7 +42,7 @@ int pty_master_open(char* slave_name, size_t slave_name_len)
         close(master_fd);
         errno = EOVERFLOW;
         perror("ERROR: overflow slave name buffer");
-        return  ERROR_OVERFLOW;
+        return  ERROR_PTY_OVERFLOW;
     }
 
     return master_fd;
@@ -67,7 +67,7 @@ pid_t pty_fork(int* master_fd, char* slave_name, size_t slave_name_len,         
             close(mfd);
             errno = EOVERFLOW;
             perror("ERROR: overflow slave name buffer");
-            return ERROR_OVERFLOW;
+            return ERROR_PTY_OVERFLOW;
         }
     }
 
@@ -77,7 +77,7 @@ pid_t pty_fork(int* master_fd, char* slave_name, size_t slave_name_len,         
     {
         perror("ERROR: fork()");
         close(mfd);
-        return  ERROR_FORK;      
+        return  ERROR_PTY_FORK;      
     }
 
     if (pid) // parent

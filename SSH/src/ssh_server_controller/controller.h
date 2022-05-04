@@ -1,5 +1,8 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
+ 
+#define _GNU_SOURCE
+
 
 #include <stdio.h>    
 #include <stdlib.h>  
@@ -46,13 +49,5 @@ int getkey();
 void screen_clear();
 
 int processing_mode(pid_t pid);
-
-int Mode_start_stop(pid_t pid);
-
-int Mode_change_src_dst(pid_t pid);
-
-int Mode_change_interval(pid_t pid);
-
-int Mode_change_backup_mode(pid_t pid);
 
 #endif // CONTROLLER_H

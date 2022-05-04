@@ -73,9 +73,9 @@ int client_udp_interface(in_addr_t address, in_port_t port)
     int broadcast = 1;
     struct timeval time = {.tv_sec = 120};
 
-    if ((setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(int)) == -1) ||
-        (setsockopt(client_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(int)) == -1) ||
-        (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO,  &time,      sizeof(time)) == -1))
+    if ((setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,     sizeof(reuse))     == -1) ||
+        (setsockopt(client_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)  == -1) ||
+        (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO,  &time,      sizeof(time))      == -1)))
     {
         perror("ERROR: setsockopt()");
         return  ERROR_SETSOCKOPT;

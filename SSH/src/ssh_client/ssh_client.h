@@ -55,6 +55,7 @@ enum ERRORS
     ERROR_ALLOCATE        = -13,
     ERROR_WRITE           = -14,
     ERROR_TIME            = -15,
+    ERROR_TCSETATTR       = -16,
 };
 
 void help_message();

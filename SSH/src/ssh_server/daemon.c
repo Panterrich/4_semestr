@@ -47,6 +47,7 @@ int daemonize(char *name, char *path, char *in_file, char *out_file, char *err_f
     create_and_lock_pid_file(name);
     create_and_open_fifo(name);
 
+
     umask(0);
     if (chdir(path) == -1)
     {
@@ -60,6 +61,7 @@ int daemonize(char *name, char *path, char *in_file, char *out_file, char *err_f
     open_in_out_err(in_file, out_file, err_file);
 
     openlog(name, LOG_PID, LOG_DAEMON);
+
     return 0;
 }
 
@@ -196,6 +198,8 @@ void close_all_fd()
         if (fd != fd_pid && fd != fd_fifo)
             close(fd);
     }
+
+    errno = 0;
 }
 
 void open_in_out_err(char *in_file, char *out_file, char *err_file)

@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
 
 int broadcast_server_interface(in_addr_t address, in_port_t port, in_addr_t broadcast_address, in_port_t broadcast_port)
 {
-    server_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    int server_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
     if (server_socket == -1)
     {

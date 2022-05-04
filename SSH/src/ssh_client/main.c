@@ -21,7 +21,8 @@ int main(int argc, char* argv[])
         if (!(strcmp(argv[i], "--help") && (strcmp(argv[i], "-h"))))
         {
             bytemask |= 0x00000001;
-            break;
+            i++;
+            continue;
         }
         
         if (!(strcmp(argv[i], "--broadcast") && (strcmp(argv[i], "-b"))))
@@ -38,15 +39,18 @@ int main(int argc, char* argv[])
                     broad_port = BROADCAST_PORT;
                 }
             }
+
+            continue;
         }
 
         if (!(strcmp(argv[i], "--history")))
         {
             bytemask |= 0x00000004;
             i++;
+            continue;
         }
 
-        if (!(strcmp(argv[i], "--ssh")  && strcmp(argv[i], "-s")))
+        if (!(strcmp(argv[i], "--ssh") && strcmp(argv[i], "-s")))
         {
             bytemask |= 0x00000008;
             i++;
@@ -75,6 +79,8 @@ int main(int argc, char* argv[])
             {
                 return -1;
             }
+
+            continue;
         }
     }
 
@@ -103,8 +109,9 @@ int main(int argc, char* argv[])
 
         case 0x00000002:
         {
-            return broadcast_client_interface(INADDR_ANY, htons(broad_port));
+            return broadcast_client_interface(htonl(INADDR_ANY), htons(broad_port));
             break;
+
         }
 
         case 0x00000004:
@@ -115,7 +122,7 @@ int main(int argc, char* argv[])
 
         case 0x00000008:
         {
-            return ssh_client(addr, username, SOCK_STREAM);
+            return ssh_client(addr, username, SOCK_DGRAM);
             break;
         }
     

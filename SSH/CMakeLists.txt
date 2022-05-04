@@ -37,7 +37,7 @@ set(RELEASE_COMPILER_OPTIONS
 # EXECUTABLE FILES PROPERTIES
 set(SSH_CLIENT_NAME "ssh_client")
 set(SSH_SERVER_NAME "ssh_server")
-set(SSH_SERVER_CONTROLLER_NAME "ssh_server_controller")
+set(SSH_SERVER_CONTROLLER_NAME "ssh_controller")
 
 set(SSH_CLIENT_SRC
     src/ssh_client/main.c

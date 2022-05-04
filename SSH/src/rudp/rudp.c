@@ -1,4 +1,5 @@
 #include "rudp.h"
+#include "syslog.h"
 
 int rudp_socket(in_addr_t address, in_port_t port, struct timeval time_rcv, int type_connection)
 {
@@ -194,11 +195,15 @@ int rudp_send(int socket, const void* message, size_t length, const struct socka
         struct sockaddr_in addr = {};
         socklen_t      len_addr = sizeof(struct sockaddr_in);
 
+        syslog(LOG_INFO, "[RUDP] server send before, errno = %d: %s", errno, strerror(errno));
+
         int n_sent = 0;
         int i = 0;
         for (; i < N_ATTEMPT; i++)
         {
             n_sent = sendto(socket, buffer, length + sizeof(struct rudp_header), 0, (struct sockaddr*) dest_addr, sizeof(struct sockaddr_in));
+            syslog(LOG_INFO, "[RUDP] server send in, errno = %d: %s", errno, strerror(errno));
+
             if (n_sent == -1 || errno == EAGAIN)
             {
                 free(buffer);
@@ -375,7 +380,7 @@ int rudp_accept(int socket, struct sockaddr_in* address, int type_connection, st
             }
             else
             {   
-                if (!address) memcpy(address, &addr, sizeof(struct sockaddr_in));
+                if (address) memcpy(address, &addr, sizeof(struct sockaddr_in));
                 break;
             }
         }

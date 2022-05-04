@@ -14,12 +14,12 @@
 
 enum PTY_ERRORS
 {
-    ERROR_POSIX_OPENPT = -1,
-    ERROR_GRANTPT      = -2,
-    ERROR_UNLOCKPT     = -3,    
-    ERROR_PTSNAME      = -4,
-    ERROR_OVERFLOW     = -5,
-    ERROR_FORK         = -6
+    ERROR_PTY_POSIX_OPENPT = -1,
+    ERROR_PTY_GRANTPT      = -2,
+    ERROR_PTY_UNLOCKPT     = -3,    
+    ERROR_PTY_PTSNAME      = -4,
+    ERROR_PTY_OVERFLOW     = -5,
+    ERROR_PTY_FORK         = -6
 };
 
 int pty_master_open(char* slave_name, size_t slave_name_len);
