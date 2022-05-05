@@ -301,7 +301,16 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                                   .sin_port = (type_connection == SOCK_STREAM) ? htons(TCP_LISTEN_PORT) : htons(UDP_LISTEN_PORT)};
     struct sockaddr_in connected_address = {};
 
+
     struct termios term = {};
+    struct termios oldt = {};
+
+    if (tcgetattr(STDIN_FILENO, &oldt) == -1)
+    {
+        perror("tcsetattr()");
+        return ERROR_TCSETATTR;
+    }
+
     cfmakeraw(&term);
     if (tcsetattr(STDIN_FILENO, TCSANOW, &term) == -1)
     {
@@ -322,76 +331,113 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
     int result = rudp_connect(socket, &server, type_connection, &control, &connected_address);
     if (result < 0) return RUDP_CONNECT;
 
-    struct pollfd master = {.fd = socket, .events = POLL_IN};
+    result = rudp_send(socket, username, strlen(username), &connected_address, type_connection, &control);
+    if (result < 0) return RUDP_SEND;
+
+    struct pollfd master[2] = {{.fd = socket, .events = POLL_IN}, {.fd = STDIN_FILENO, .events = POLL_IN}};
 
     size_t n_write = 0;
     size_t n_read  = 0;
-
  
     while (1)
     {
-        int event = poll(&master, 1, 100);
+        int event = poll(master, 2, 100);
         if (event > 0)
-        {
-            if (type_connection == SOCK_STREAM)
+        {   
+            if (master[0].revents == POLL_IN)
             {
-                n_read = rudp_recv(socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
-                if (n_read == -1)
+                if (type_connection == SOCK_STREAM)
                 {
-                    perror("rudp_recv(SOCK_STREAM)");
-                    return -1;
+                    n_read = rudp_recv(socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                    if (n_read == -1)
+                    {
+                        perror("rudp_recv(SOCK_STREAM)");
+                        return -1;
+                    }
+
+                    if (n_read == 0)
+                    {
+                        rudp_close(socket, SOCK_STREAM, NULL, NULL, 0);
+                        break;
+                    }
                 }
-            }
-            else
-            {
-                n_read = rudp_recv(socket, buff, sizeof(buff), &connected_address, SOCK_DGRAM, &control);
-                if (n_read == -1)
+                else
                 {
-                    perror("rudp_recv(SOCK_DGRAM");
-                    return -1;
+                    n_read = rudp_recv(socket, buff, sizeof(buff), &connected_address, SOCK_DGRAM, &control);
+                    if (n_read == -1)
+                    {
+                        perror("rudp_recv(SOCK_DGRAM");
+                        return -1;
+                    }
+
+                    if (n_read == 0)
+                    {
+                        rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 2);
+                        rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 3);
+                        break;
+                    }
                 }
-            }
-            
+                
 
-            n_write = write(STDOUT_FILENO, buff, n_read);
-            if (n_write == -1)
-            {
-                perror("write()");
-                return -1;
-            }
-
-            
-        }
-        else if (event == 0)
-        {
-            n_read = read(STDIN_FILENO, buff, sizeof(buff) - 1);
-            if (n_read == -1)
-            {
-                perror("read()");
-                return -1;
-            }
-
-            if (*buff == 4) break;
-            
-            if (type_connection == SOCK_STREAM)
-            {
-                n_write = rudp_send(socket, buff, n_read, NULL, SOCK_STREAM, NULL);
+                n_write = write(STDOUT_FILENO, buff, n_read);
                 if (n_write == -1)
                 {
-                    perror("rudp_send(SOCK_STREAM)");
+                    perror("write()");
                     return -1;
                 }
+
             }
-            else
+            
+            if (master[1].revents == POLL_IN)
             {
-                n_write = rudp_send(socket, buff, n_read, &connected_address, SOCK_DGRAM, &control);
-                if (n_write == -1)
+                n_read = read(STDIN_FILENO, buff, sizeof(buff) - 1);
+                if (n_read == -1)
                 {
-                    perror("rudp_send(SOCK_DGRAM");
+                    perror("read()");
                     return -1;
+                }
+
+                if (*buff == 4) 
+                {
+                    rudp_close(socket, type_connection, &connected_address, &control, 1);
+                    rudp_close(socket, type_connection, &connected_address, &control, 3);
+                    break;
+                }
+                
+                if (type_connection == SOCK_STREAM)
+                {
+                    n_write = rudp_send(socket, buff, n_read, NULL, SOCK_STREAM, NULL);
+                    if (n_write == -1)
+                    {
+                        perror("rudp_send(SOCK_STREAM)");
+                        return -1;
+                    }
+                }
+                else
+                {
+                    n_write = rudp_send(socket, buff, n_read, &connected_address, SOCK_DGRAM, &control);
+                    if (n_write == -1)
+                    {
+                        perror("rudp_send(SOCK_DGRAM");
+                        return -1;
+                    }
                 }
             }
         }
+        else if (event == 0) 
+        {
+            continue;
+        }
+        else 
+        {
+            break;
+        }
+    }
+
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) == -1)
+    {
+        perror("tcsetattr()");
+        return ERROR_TCSETATTR;
     }
 
     return 0;

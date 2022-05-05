@@ -52,8 +52,25 @@ int main(int argc, char* argv[])
 
         if (!(strcmp(argv[i], "--ssh") && strcmp(argv[i], "-s")))
         {
-            bytemask |= 0x00000008;
             i++;
+            
+            if (i < argc)
+            {
+                if (!(strcmp(argv[i], "--tcp") && strcmp(argv[i], "-t")))
+                {
+                    bytemask |= 0x0000010;
+                    i++;
+                } 
+                else if (!(strcmp(argv[i], "--udp") && strcmp(argv[i], "-u")))
+                {
+                    bytemask |= 0x0000020;
+                    i++;
+                }
+                else 
+                {
+                    bytemask |= 0x0000010;
+                }
+            }
 
             if (i < argc)
             {
@@ -120,12 +137,18 @@ int main(int argc, char* argv[])
             break;
         }
 
-        case 0x00000008:
+        case 0x00000010:
+        {
+            return ssh_client(addr, username, SOCK_STREAM);
+            break;
+        }
+
+        case 0x00000020:
         {
             return ssh_client(addr, username, SOCK_DGRAM);
             break;
         }
-    
+
         default:
         {
             help_message();

@@ -10,6 +10,8 @@
 #include <security/pam_appl.h>
 #include <security/pam_misc.h>
 
+int login_into_user(char* username);
 
+int set_id(const char* username);
 
 #endif // PUM_H

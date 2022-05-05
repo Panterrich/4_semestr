@@ -12,7 +12,6 @@ int main(int argc, char *argv[])
 
     sigset_t sig = {};
     sigmask_configuration(&sig);
-    sigdelset(&sig, SIGCHLD);
 
     int signum = 0;
     siginfo_t info = {};
@@ -26,6 +25,7 @@ int main(int argc, char *argv[])
         syslog(LOG_NOTICE, "broadcast has been started");
         int result = broadcast_server_udp_interface(INADDR_ANY, htons(BROADCAST_PORT));
         syslog(LOG_NOTICE, "broadcast has been stopped, error %d: %s", result, strerror(errno));
+        return result;
     }
 
     int pid_tcp = fork();
@@ -35,6 +35,7 @@ int main(int argc, char *argv[])
         syslog(LOG_NOTICE, "tcp-ssh has been started");
         int result = ssh_server(INADDR_ANY, htons(TCP_LISTEN_PORT), SOCK_STREAM);
         syslog(LOG_NOTICE, "tcp-ssh has been stopped, error %d: %s", result, strerror(errno));
+        return result;
     }
 
     int pid_udp = fork();
@@ -44,6 +45,7 @@ int main(int argc, char *argv[])
         syslog(LOG_NOTICE, "udp-ssh has been started");
         int result = ssh_server(INADDR_ANY, htons(UDP_LISTEN_PORT), SOCK_DGRAM);
         syslog(LOG_NOTICE, "udp-ssh has been stopped, error %d: %s", result, strerror(errno));
+        return result;
     }
 
     while (1)
@@ -54,10 +56,11 @@ int main(int argc, char *argv[])
         {
             case SIGQUIT:
             case SIGTERM:
+            case SIGCHLD:
             {
-                kill(pid_broadcast, SIGTERM);
-                kill(pid_tcp,       SIGTERM);
-                kill(pid_udp,       SIGTERM);
+                kill(pid_broadcast, SIGKILL);
+                kill(pid_tcp,       SIGKILL);
+                kill(pid_udp,       SIGKILL);
                 syslog(LOG_NOTICE, "terminated");
                 shutdown_demon(signum);
             }
@@ -69,9 +72,9 @@ int main(int argc, char *argv[])
         }
     }
 
-    kill(pid_broadcast, SIGTERM);
-    kill(pid_tcp,       SIGTERM);
-    kill(pid_udp,       SIGTERM);
+    kill(pid_broadcast, SIGKILL);
+    kill(pid_tcp,       SIGKILL);
+    kill(pid_udp,       SIGKILL);
     syslog(LOG_NOTICE, "daemon has been finished");
     shutdown_demon(0);
 }

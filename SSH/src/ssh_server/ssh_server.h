@@ -52,6 +52,7 @@ enum ERRORS
     ERROR_READ            = -11,
     ERROR_SEND            = -12,
     ERROR_FORK            = -13,
+    ERROR_SET_ID          = -14,
 };
 
 void sigchild_handler(int s);
