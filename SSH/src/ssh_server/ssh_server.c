@@ -22,7 +22,7 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
     
     char buffer[MAX_LEN] = "";
 
-    syslog(LOG_INFO, "Broadcast is recieving");
+    syslog(LOG_INFO, "broadcast is recieving");
 
     while (1)
     {
@@ -40,7 +40,7 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
 
         buffer[len] = '\0';
 
-        syslog(LOG_NOTICE, "Broadcast message received from %s:%d :: %s\n", inet_ntoa(((struct sockaddr_in*)&client)->sin_addr), ntohs(((struct sockaddr_in*)&client)->sin_port), buffer);
+        syslog(LOG_NOTICE, "broadcast message received from %s:%d :: %s\n", inet_ntoa(((struct sockaddr_in*)&client)->sin_addr), ntohs(((struct sockaddr_in*)&client)->sin_port), buffer);
 
         if (strcmp(buffer, "Hi, POWER!") == 0)
         {
@@ -56,7 +56,7 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
         }
     }
 
-    syslog(LOG_WARNING, "Broadcast socket close");
+    syslog(LOG_WARNING, "broadcast socket close");
     
     close(server_socket);
 
@@ -103,7 +103,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
     if (type_connection == SOCK_STREAM)
     {
         struct timeval time = {.tv_sec = STANTARD_TIME};
-        int socket = rudp_socket(INADDR_ANY, port, time, SOCK_STREAM);
+        int socket = rudp_socket(address, port, time, SOCK_STREAM);
         if (socket < 0) return RUDP_SOCKET;
 
         syslog(LOG_NOTICE, "daemon POWER[%d] rudp_socket created port %d", getpid(), ntohs(port));
@@ -198,9 +198,6 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         if (master[1].revents == POLL_IN)
                         {
                             n_read = rudp_recv(accepted_socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
-                            if (n_read > 0) n_read -= sizeof(struct rudp_header);
-                            buff[n_read] = '\0';
-                            syslog(LOG_INFO, "[RUDP] server recv %ld \"%s\" errno = %d", n_read, buff, errno);
                             if (n_read == -1)
                             {
                                 perror("rudp_send(SOCK_STREAM)");
@@ -209,7 +206,8 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                             if (!n_read)
                             {
                                 syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
-                                rudp_close(accepted_socket, type_connection, NULL, NULL, 2);
+                                rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+                                kill(pid, SIGKILL);
                                 return 1;             
                             }
                             syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
@@ -240,7 +238,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
     } else if (type_connection == SOCK_DGRAM)
     {
         struct timeval time = {.tv_sec = STANTARD_TIME};
-        int socket = rudp_socket(INADDR_ANY, port, time, SOCK_DGRAM);
+        int socket = rudp_socket(address, port, time, SOCK_DGRAM);
         if (socket < 0) return RUDP_SOCKET;
 
         syslog(LOG_NOTICE, "daemon POWER[%d] rudp_socket created port %d", getpid(), ntohs(port));
@@ -336,7 +334,6 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         if (master[1].revents == POLL_IN)
                         {
                             n_read = rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
-                            if (n_read > 0) n_read -= sizeof(struct rudp_header);
                             buff[n_read] = '\0';
                             syslog(LOG_INFO, "[RUDP] server recv %d \"%s\" errno = %d", n_read, buff, errno);
                             if (n_read == -1)
@@ -344,15 +341,14 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                                 perror("rudp_send(SOCK_STREAM)");
                                 return -1;
                             }
-                            // if (!n_read)
-                            // {
-                            //     rudp_close(accepted_socket, type_connection, &client, &control, 2);
-                            //     syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
-                            //     return 1;
-                            // }
-
+                            if (!n_read)
+                            {
+                                rudp_close(accepted_socket, type_connection, &client, &control, 2);
+                                syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
+                                kill(pid, SIGKILL);
+                                return 1;
+                            }
                            
-
                             n_write = write(master_fd, buff, n_read);
                             if (n_write == -1)
                             {
@@ -383,4 +379,230 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
     {
         return RUDP_UNDEFINED_TYPE;
     }
+}
+
+//==========================================================================================================================
+
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+int exit_master_read_loop = 0;
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+void sigusr1(int s)
+{
+    syslog(LOG_INFO, "copy_server SIGUSR1 errno = %d", errno);
+    exit_master_read_loop = 1;
+}
+
+
+int copy_server(in_addr_t address, in_port_t port)
+{
+    struct timeval time = {.tv_sec = STANTARD_TIME};
+    int socket = rudp_socket(address, port, time, SOCK_STREAM);
+    if (socket < 0) return RUDP_SOCKET;
+
+    syslog(LOG_NOTICE, "daemon POWER[%d] rudp_socket created port %d", getpid(), ntohs(port));
+
+    int result = listen(socket, SIZE_QUEUE);
+    if (result == -1) return RUDP_LISTEN;
+
+    syslog(LOG_NOTICE, "daemon POWER[%d] rudp_socket listened, errno = %d: %s", getpid(), errno, strerror(errno));
+
+
+    struct sockaddr_in client = {};
+
+    while (1)
+    {
+        int accepted_socket = rudp_accept(socket, &client, SOCK_STREAM, NULL);
+        syslog(LOG_NOTICE, "daemon POWER[%d] %d", getpid(), accepted_socket);
+        if (accepted_socket < 0) return RUDP_ACCEPT;
+
+        if (accepted_socket > 0)
+        {   
+            syslog(LOG_ERR, "[RUDP] after accept pid = %d, errno = %d", getpid(), errno);
+            syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
+            char buff[MAX_BUFFER] = "";
+            char slave[MAX_LEN] = "";
+
+            sigset_t mask = {};
+            sigemptyset(&mask);
+            sigaddset(&mask, SIGUSR1);
+            sigaddset(&mask, SIGCHLD);
+            if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
+            {
+                syslog(LOG_ERR, "copy_server sigprocmask(), errno = %d: %s", errno, strerror(errno));
+                return ERROR_SIGACTION;
+            }
+
+            struct sigaction sig = {.sa_handler = sigusr1};
+            if (sigaction(SIGUSR1, &sig, NULL) == -1)
+            {
+                syslog(LOG_ERR, "copy_server sigaction(), errno = %d: %s", errno, strerror(errno));
+                return ERROR_SIGACTION;                
+            }
+
+            struct file_copy_header header = {};
+            int result = rudp_recv(accepted_socket, &header, sizeof(header), NULL, SOCK_STREAM, NULL);
+            if (result < 0) return RUDP_RECV;
+
+            syslog(LOG_INFO, "[COPY] header: path: \"%s\" username: \"%s\" size: %lu mode: %lo", header.path, header.username, header.size, header.mode);
+
+            int master_fd = 0;
+
+            pid_t pid = pty_fork(&master_fd, slave, MAX_LEN, NULL, NULL);
+            if (pid < 0) syslog(LOG_ERR, "[RUDP] pty_fork pid = %d, errno = %d", pid, errno);
+            if (pid == 0)
+            {
+                result = login_into_user(header.username);
+                syslog(LOG_INFO, "[RUDP] server login into \"%s\" user %d, errno = %d", header.username, result, errno);
+                
+                if (result == -1)
+                {
+                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+                    return ERROR_LOGIN;
+                } 
+
+                kill(getppid(), SIGUSR1);
+
+                result = set_id(header.username);
+                if (result == -1)
+                {
+                    syslog(LOG_INFO, "[PAM] set_id \"%s\" user %d, errno = %d", header.username, result, errno);
+                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                    return ERROR_SET_ID;
+                } 
+
+                int fd = open(header.path, O_WRONLY | O_CREAT | O_LARGEFILE | O_TRUNC, header.mode);
+                if (fd == -1)
+                {
+                    syslog(LOG_INFO, "[COPY] open, errno = %d: %s", errno, strerror(errno));
+                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                    return ERROR_OPEN;
+                }
+
+                while (!exit_master_read_loop);
+
+                int result = rudp_send(accepted_socket, &header, sizeof(header), &client, SOCK_STREAM, NULL);
+                if (result == -1)
+                {
+                    syslog(LOG_ERR, "[RUDP] copy_server send errno = %d", errno);
+                    return -1;
+                }
+
+                syslog(LOG_ERR, "[RUDP] copy_server has been started receiving the file, errno = %d", errno);
+
+                size_t size = 0;
+
+                while (1)
+                {
+                    int n_read = rudp_recv(accepted_socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                    if (n_read == -1)
+                    {
+                        syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
+                        return -1;
+                    }
+                    if (!n_read)
+                    {
+                        syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
+                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+                        return 1;             
+                    }
+                    
+                    syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
+
+                    int n_write = write(fd, buff, n_read);
+                    if (n_write == -1)
+                    {
+                        syslog(LOG_ERR, "write(fd), errno = %d", errno);
+                        return -1;
+                    }
+
+                    size += n_write;
+                    if (size == header.size) break;
+                }
+                
+                rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+                return 0;
+            }
+
+            
+            struct pollfd master[2] = {{.fd = master_fd, .events = POLL_IN}, {.fd = accepted_socket, .events = POLL_IN}};
+
+            size_t n_write = 0;
+            size_t n_read  = 0;
+
+            while (1)
+            {
+                if (exit_master_read_loop == 1) break;
+
+                int event = poll(master, 2, 100);
+                if (event > 0)
+                {
+                    if (master[0].revents == POLL_IN)
+                    {
+                        n_read = read(master_fd, buff, sizeof(buff));
+                        if (n_read == -1)
+                        {
+                            perror("read");
+                            return -1;
+                        }
+
+                        syslog(LOG_INFO, "[RUDP] server read errno = %d", errno);
+
+                        
+                        n_write = rudp_send(accepted_socket, buff, n_read, &client, SOCK_STREAM, NULL);
+                        if (n_write == -1)
+                        {
+                            perror("rudp_recv(SOCK_STREAM)");
+                            return -1;
+                        }
+
+                        syslog(LOG_INFO, "[RUDP] server send errno = %d", errno);
+                    }
+                    
+                    if (master[1].revents == POLL_IN)
+                    {
+                        n_read = rudp_recv(accepted_socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                        if (n_read == -1)
+                        {
+                            perror("rudp_send(SOCK_STREAM)");
+                            return -1;
+                        }
+                        if (!n_read)
+                        {
+                            syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
+                            rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+                            kill(pid, SIGKILL);
+                            return 1;             
+                        }
+                        syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
+
+                        n_write = write(master_fd, buff, n_read);
+                        if (n_write == -1)
+                        {
+                            perror("write()");
+                            return -1;
+                        }     
+
+                        syslog(LOG_INFO, "[RUDP] server write errno = %d", errno);
+                    }
+                }
+                else if (event == 0) continue;
+                else
+                {
+                    break;
+                }
+            }
+
+            if (errno == EINTR) errno = 0;
+            syslog(LOG_INFO, "copy_server is waiting for the file transmission to finish. errno = %d", errno);
+            kill(pid, SIGUSR1);
+
+            waitpid(pid, NULL, 0);  
+
+            rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+            return 0;
+        }
+    }
+
+    return 0;
 }

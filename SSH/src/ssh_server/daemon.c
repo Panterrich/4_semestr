@@ -247,7 +247,6 @@ int check_args(char* src, char* dst)
     return check_dst(dst);
 }
 
-
 int check_dst(char* dst)
 {
     DIR* dir = opendir(dst);

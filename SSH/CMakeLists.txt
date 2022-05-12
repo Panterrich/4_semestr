@@ -55,7 +55,7 @@ set(SSH_SERVER_CONTROLLER_SRC
     src/ssh_server_controller/main.c
 )   
 
-add_library(rudp STATIC src/pty/pty.c src/rudp/rudp.c src/pty/pam.c)
+add_library(rudp SHARED src/pty/pty.c src/rudp/rudp.c src/pty/pam.c)
 
 # EXECUTABLE FILES
 add_executable(${SSH_CLIENT_NAME}            ${SSH_CLIENT_SRC})

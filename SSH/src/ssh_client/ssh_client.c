@@ -4,16 +4,18 @@
 
 void help_message()
 {
-    printf("Usage: ./ssh_client [command] [options]...                                                                                                                  \n"
-           "Commands:                                                                                                                                                   \n"
-           "  [ -b | --broadcast ] [ <port> ]                     Find accessible SSH servers using broadcast by <port> and write <ip:port> to \"/tmp/.ssh_broadcast\". \n"
-           "                                                      Default broadcast <port> is 35000.                                                                    \n"
-           "  [ -h | --help ]                                     Dispay this information.                                                                              \n"
-           "  [ -s | --ssh  ] <name>@<ip>                         Connect to ssh server under <name> user by <ip>                                                \n"
-           "Options:                                                                                                                                                    \n"
-           "  [ -j | --systemlog | -f <file> | --filelog <file> ] Logging to the system journal or to <file>.                                                           \n"
-           "                                                      Default mode is system journaling                                                                     \n"
-           "                                                      Default log <file> is \"/tmp/.ssh-log\"                                                               \n");
+    printf("Usage: ./ssh_client [command] [options]...                                                                                                                        \n"
+           "Commands:                                                                                                                                                         \n"
+           "  [ -b | --broadcast ] [ <port> ]                           Find accessible SSH servers using broadcast by <port> and write <ip:port> to \"/tmp/.ssh_broadcast\". \n"
+           "                                                            Default broadcast <port> is 35000.                                                                    \n"
+           "  [ -h | --help ]                                           Dispay this information.                                                                              \n"
+           "  [ -s | --ssh  ] <name>@<ip> [ -t | --tcp || -u | --udp ]  Connect to ssh server under <name> user by <ip> by using <tcp> or <udp> protocol.                     \n"
+           "                                                            Default protocol is tcp                                                                               \n"
+           "  [ -c | --copy ] </path_src> <name>@<ip>:</path_dst>       Copy the file from the local machine on </path_src> to the ssh-server on </path_dst>.                 \n"
+           "Options:                                                                                                                                                          \n"
+           "  [ -j | --systemlog | -f <file> | --filelog <file> ]       Logging to the system journal or to <file>.                                                           \n"
+           "                                                            Default mode is system journaling                                                                     \n"
+           "                                                            Default log <file> is \"/tmp/.ssh-log\"                                                               \n");
 }
 
 size_t file_size(int fd)
@@ -243,7 +245,6 @@ void ssh_history_end(int file_history_server)
 int print_ssh_history()
 {
     int fd = open(DEFAULT_HISTORY, O_RDONLY | O_LARGEFILE);
-
     if (fd == -1)
     {
         printf("Server history not found. See \'ssh_client --help\'\n");
@@ -286,7 +287,6 @@ int print_ssh_history()
 }
 
 //=====================================================================================================
-
 
 int ssh_client(in_addr_t address, char* username, int type_connection)
 {
@@ -371,13 +371,20 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                     }
 
                     if (n_read == 0)
-                    {
-                        rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 2);
-                        rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 3);
+                    {   
+                        if (type_connection == SOCK_DGRAM)
+                        {
+                            rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 2);
+                            rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 3);
+                        }
+
+                        else if (type_connection == SOCK_STREAM)
+                        {
+                            rudp_close(socket, SOCK_STREAM, &connected_address, &control, 0);
+                        }
                         break;
                     }
                 }
-                
 
                 n_write = write(STDOUT_FILENO, buff, n_read);
                 if (n_write == -1)
@@ -397,10 +404,20 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                     return -1;
                 }
 
-                if (*buff == 4) 
-                {
-                    rudp_close(socket, type_connection, &connected_address, &control, 1);
-                    rudp_close(socket, type_connection, &connected_address, &control, 3);
+                if (*buff == 4) // ctrl + D
+                {   
+                    if (type_connection == SOCK_DGRAM)
+                    {
+                        rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 1);
+                        rudp_recv(socket, buff, sizeof(buff), &connected_address, SOCK_DGRAM, &control);
+                        rudp_close(socket, SOCK_DGRAM, &connected_address, &control, 3);
+                    }
+
+                    else if (type_connection == SOCK_STREAM)
+                    {
+                        rudp_close(socket, SOCK_STREAM, &connected_address, &control, 0);
+                    }
+                    
                     break;
                 }
                 
@@ -443,4 +460,201 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
     return 0;
 }
 
+int ssh_copy_file(in_addr_t address, char* username, char* path_src, char* path_dst)
+{
+    struct sockaddr_in server  = {.sin_family = AF_INET, .sin_addr.s_addr = address, .sin_port = htons(COPY_LISTEN_PORT)};
 
+    struct termios term = {};
+    struct termios oldt = {};
+
+    if (tcgetattr(STDIN_FILENO, &oldt) == -1)
+    {
+        perror("tcsetattr()");
+        return ERROR_TCSETATTR;
+    }
+
+    cfmakeraw(&term);
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &term) == -1)
+    {
+        perror("tcsetattr()");
+        return ERROR_TCSETATTR;
+    } 
+
+    struct stat info_src = {};
+
+    int result = stat(path_src, &info_src);
+    if (result == -1 && errno == ENOENT)
+    {
+        fprintf(stderr, "File \"%s\" not found!\n", path_src);
+        return 0;
+    }
+    if (result == -1)
+    {
+        perror("ERROR: stat file ");
+        return 0;
+    }
+
+    int fd = open(path_src, O_RDONLY);
+    if (fd == -1) return ERROR_OPEN;
+
+    struct file_copy_header header = {};
+    strncpy(header.username, username, sizeof(header.username));
+    strncpy(header.path,     path_dst, sizeof(header.path));
+    header.mode = info_src.st_mode;
+    header.size = info_src.st_size;
+
+
+    char buff[MAX_BUFFER] = "";
+
+    struct timeval time = {.tv_sec = STANTARD_TIME};   
+    int socket = rudp_socket(INADDR_ANY, 0, time, SOCK_STREAM);
+    if (socket < 0) 
+    {
+        perror("rudp_socket()");
+        return  RUDP_SOCKET;
+    }
+
+    result = rudp_connect(socket, &server, SOCK_STREAM, NULL, NULL);
+    if (result < 0) return RUDP_CONNECT;
+
+    result = rudp_send(socket, &header, sizeof(header), NULL, SOCK_STREAM, NULL);
+    if (result < 0) return RUDP_SEND;
+
+    struct pollfd master[2] = {{.fd = socket, .events = POLL_IN}, {.fd = STDIN_FILENO, .events = POLL_IN}};
+
+    size_t n_write = 0;
+    size_t n_read  = 0;
+ 
+    while (1)
+    {
+        int event = poll(master, 2, 100);
+        if (event > 0)
+        {   
+            if (master[0].revents == POLL_IN)
+            { 
+                n_read = rudp_recv(socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                if (n_read == -1)
+                {
+                    perror("rudp_recv(SOCK_STREAM)");
+                    return -1;
+                }
+
+                if (n_read == sizeof(struct file_copy_header) && !memcmp(buff, &header, sizeof(struct file_copy_header))) break;
+
+                if (n_read == 0)
+                {
+                    rudp_close(socket, SOCK_STREAM, NULL, NULL, 0);
+                    break;
+                }
+
+                n_write = write(STDOUT_FILENO, buff, n_read);
+                if (n_write == -1)
+                {
+                    perror("write()");
+                    return -1;
+                }
+
+            }
+            
+            if (master[1].revents == POLL_IN)
+            {
+                n_read = read(STDIN_FILENO, buff, sizeof(buff) - 1);
+                if (n_read == -1)
+                {
+                    perror("read()");
+                    return -1;
+                }
+
+                if (*buff == 4) // ctrl + D
+                {   
+                    rudp_close(socket, SOCK_STREAM, NULL, NULL, 0);
+                    break;
+                }
+                
+                n_write = rudp_send(socket, buff, n_read, NULL, SOCK_STREAM, NULL);
+                if (n_write == -1)
+                {
+                    perror("rudp_send(SOCK_STREAM)");
+                    return -1;
+                }
+            }
+        }
+        else if (event == 0) 
+        {
+            continue;
+        }
+        else 
+        {
+            break;
+        }
+    }
+
+    size_t size       = 0;
+    size_t size_write = 0;
+    char packet[MAX_LEN] = "";
+
+    while (1)
+    {
+        n_read = read(fd, packet, MAX_LEN - 1);
+        if (n_read == -1)
+        {
+            perror("read()");
+            return -1;
+        }
+        
+        n_write = rudp_send(socket, packet, n_read, NULL, SOCK_STREAM, NULL);
+        if (n_write == -1)
+        {
+            perror("rudp_send(SOCK_STREAM)");
+            return -1;
+        }
+
+        size       += n_read;
+        size_write += n_write;
+        if (size != size_write)
+        {
+            if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) == -1)
+            {
+                perror("tcsetattr()");
+                return ERROR_TCSETATTR;
+            }
+            fprintf(stderr, "Error has occurred, please try again!\n");
+            return -1;
+        }
+
+        if (size_write == header.size) break;
+    }
+
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) == -1)
+    {
+        perror("tcsetattr()");
+        return ERROR_TCSETATTR;
+    }
+    
+    return 0;
+}
+
+int check_file(char* path_src)
+{
+    struct stat info_src = {};
+
+    int result = stat(path_src, &info_src);
+    if (result == -1 && errno == ENOENT)
+    {
+        fprintf(stderr, "File \"%s\" not found!\n", path_src);
+        return 0;
+    }
+    if (result == -1)
+    {
+        perror("ERROR: stat file ");
+        return 0;
+    }
+
+    if (S_ISFIFO(info_src.st_mode) || S_ISREG(info_src.st_mode) || S_ISLNK(info_src.st_mode))
+    {   
+        return 1;
+    }
+
+    fprintf(stderr, "File \"%s\" is not link, regular or fifo file!\n", path_src);
+    return 0;
+}

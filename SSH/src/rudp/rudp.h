@@ -18,6 +18,9 @@
 #include <wait.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/sysmacros.h>
+#include <stdint.h>
 #include <netinet/in.h>
 #include <time.h>
 
@@ -53,6 +56,14 @@ struct rudp_header
 
     size_t sequence_number;
     size_t acknowledgement_number;
+};
+
+struct file_copy_header
+{
+    char username[MAX_INPUT];
+    char path[NAME_MAX];
+    size_t size;
+    uintmax_t mode;
 };
 
 #define N_ATTEMPT     3

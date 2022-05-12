@@ -32,9 +32,11 @@
 #define MAX_SERVERS 100
 #define MAX_BUFFER (2 << 20)
 
-#define BROADCAST_PORT  35000
-#define TCP_LISTEN_PORT 34000
-#define UDP_LISTEN_PORT 33000
+#define COPY_LISTEN_PORT 36000
+#define BROADCAST_PORT   35000
+#define TCP_LISTEN_PORT  34000
+#define UDP_LISTEN_PORT  33000
+
 #define DEFAULT_LOG     "/tmp/.ssh-log"
 #define DEFAULT_HISTORY "/tmp/.ssh-history"
 
@@ -85,5 +87,10 @@ int ssh_history_no_server(int file_history_server);
 
 void ssh_history_end(int file_history_server);
 
+//=====================================================================================================
+
+int check_file(char* path_src);
+
+int ssh_copy_file(in_addr_t address, char* username, char* path_src, char* path_dst);
 
 #endif //! SSH_CLIENT_H

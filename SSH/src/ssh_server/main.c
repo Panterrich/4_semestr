@@ -13,6 +13,8 @@ int main(int argc, char *argv[])
     sigset_t sig = {};
     sigmask_configuration(&sig);
 
+    
+
     int signum = 0;
     siginfo_t info = {};
 
@@ -48,6 +50,16 @@ int main(int argc, char *argv[])
         return result;
     }
 
+    int pid_copy = fork();
+    if (pid_copy == -1) return ERROR_FORK;
+    if (pid_copy == 0)
+    {   
+        syslog(LOG_NOTICE, "copy_server has been started");
+        int result = copy_server(INADDR_ANY, htons(COPY_LISTEN_PORT));
+        syslog(LOG_NOTICE, "copy_server has been stopped, error %d: %s", result, strerror(errno));
+        return result;
+    }
+
     while (1)
     {   
         signum = sigwaitinfo(&sig, &info);
@@ -61,13 +73,21 @@ int main(int argc, char *argv[])
                 kill(pid_broadcast, SIGKILL);
                 kill(pid_tcp,       SIGKILL);
                 kill(pid_udp,       SIGKILL);
+                kill(pid_copy,      SIGKILL);
                 syslog(LOG_NOTICE, "terminated");
                 shutdown_demon(signum);
             }
             break;
 
+            case SIGUSR1:
+            {
+                syslog(LOG_NOTICE, "the controller is watching the daemon");
+                continue;
+            }
+            break;
+
             default:
-                syslog(LOG_WARNING, "undefined signal");
+                syslog(LOG_WARNING, "undefined signal %d", signum);
                 break;
         }
     }
@@ -75,6 +95,7 @@ int main(int argc, char *argv[])
     kill(pid_broadcast, SIGKILL);
     kill(pid_tcp,       SIGKILL);
     kill(pid_udp,       SIGKILL);
+    kill(pid_copy,      SIGKILL);
     syslog(LOG_NOTICE, "daemon has been finished");
     shutdown_demon(0);
 }

@@ -1,5 +1,4 @@
 #include "rudp.h"
-#include "syslog.h"
 
 int rudp_socket(in_addr_t address, in_port_t port, struct timeval time_rcv, int type_connection)
 {
@@ -58,7 +57,8 @@ int rudp_recv(int socket, void* message, size_t length, struct sockaddr_in* addr
 {
     if (type_connection == SOCK_STREAM)
     {    
-        int len = recv(socket, message, length, 0);
+        socklen_t socklen = 0;
+        int len = recvfrom(socket, message, length, 0, (struct sockaddr*) address, &socklen);
         if (len == -1 && errno == EAGAIN)
         {
             return RUDP_CLOSE_CONNECTION;
@@ -137,7 +137,7 @@ int rudp_recv(int socket, void* message, size_t length, struct sockaddr_in* addr
             memcpy(message, buffer + sizeof(struct rudp_header), length);
             free(buffer);
 
-            return n_recv;
+            return n_recv - sizeof(struct rudp_header);
         }
         else
         {
@@ -195,14 +195,11 @@ int rudp_send(int socket, const void* message, size_t length, const struct socka
         struct sockaddr_in addr = {};
         socklen_t      len_addr = sizeof(struct sockaddr_in);
 
-        syslog(LOG_INFO, "[RUDP] server send before, errno = %d: %s", errno, strerror(errno));
-
         int n_sent = 0;
         int i = 0;
         for (; i < N_ATTEMPT; i++)
         {
             n_sent = sendto(socket, buffer, length + sizeof(struct rudp_header), 0, (struct sockaddr*) dest_addr, sizeof(struct sockaddr_in));
-            syslog(LOG_INFO, "[RUDP] server send in, errno = %d: %s", errno, strerror(errno));
 
             if (n_sent == -1 || errno == EAGAIN)
             {
@@ -534,7 +531,7 @@ int rudp_close(int socket, int type_connection, const struct sockaddr_in* addres
     }
     else if (type_connection == SOCK_DGRAM)
     {
-        if (step == 1 && step == 2)
+        if (step == 1 || step == 2)
         {
             struct timeval ack_time      = {.tv_sec = ACK_TIME};
             struct timeval standard_time = {.tv_sec = STANTARD_TIME};
@@ -606,7 +603,7 @@ int rudp_close(int socket, int type_connection, const struct sockaddr_in* addres
             return 0;
         }
         
-        if (step == 2 && step == 3)
+        if (step == 2 || step == 3)
         {
             if (close(socket) == -1)
             {

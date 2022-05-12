@@ -30,9 +30,11 @@
 #define MAX_LEN 1000
 #define MAX_BUFFER (2 << 20)
 
-#define UDP_LISTEN_PORT 33000
-#define TCP_LISTEN_PORT 34000
-#define BROADCAST_PORT  35000
+#define UDP_LISTEN_PORT  33000
+#define TCP_LISTEN_PORT  34000
+#define BROADCAST_PORT   35000
+#define COPY_LISTEN_PORT 36000
+
 
 //============================================================================================
 
@@ -53,6 +55,8 @@ enum ERRORS
     ERROR_SEND            = -12,
     ERROR_FORK            = -13,
     ERROR_SET_ID          = -14,
+    ERROR_OPEN            = -15,
+    ERROR_LOGIN           = -16,
 };
 
 void sigchild_handler(int s);
@@ -62,5 +66,7 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
 int broadcast_socket_configuration(in_addr_t address, in_port_t port);
 
 int ssh_server(in_addr_t address, in_port_t port, int type_connection);
+
+int copy_server(in_addr_t address, in_port_t port);
 
 #endif // SSH_SERVER_H
