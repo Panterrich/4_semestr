@@ -55,15 +55,15 @@ set(SSH_SERVER_CONTROLLER_SRC
     src/ssh_server_controller/main.c
 )   
 
-add_library(rudp SHARED src/pty/pty.c src/rudp/rudp.c src/pty/pam.c)
+add_library(rudp SHARED src/pty/pty.c src/rudp/rudp.c src/rudp/security.c src/pty/pam.c)
 
 # EXECUTABLE FILES
 add_executable(${SSH_CLIENT_NAME}            ${SSH_CLIENT_SRC})
 add_executable(${SSH_SERVER_NAME}            ${SSH_SERVER_SRC})
 add_executable(${SSH_SERVER_CONTROLLER_NAME} ${SSH_SERVER_CONTROLLER_SRC})
 
-target_link_libraries(${SSH_CLIENT_NAME} rudp pam pam_misc pthread)
-target_link_libraries(${SSH_SERVER_NAME} rudp pam pam_misc pthread)
+target_link_libraries(${SSH_CLIENT_NAME} rudp pam pam_misc pthread ssl)
+target_link_libraries(${SSH_SERVER_NAME} rudp pam pam_misc pthread ssl)
 
 target_include_directories(${SSH_CLIENT_NAME}            PRIVATE src/logger src/include src/hashtable src/pty src/rudp)
 target_include_directories(${SSH_SERVER_NAME}            PRIVATE src/logger src/include src/hashtable src/pty src/rudp)

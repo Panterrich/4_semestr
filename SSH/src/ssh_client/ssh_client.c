@@ -1,6 +1,7 @@
 #include "ssh_client.h"
 #include "pty.h"
 #include "rudp.h"
+#include "security.h"
 
 void help_message()
 {
@@ -330,6 +331,14 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
 
     int result = rudp_connect(socket, &server, type_connection, &control, &connected_address);
     if (result < 0) return RUDP_CONNECT;
+
+    unsigned char secret[MAX_LEN] = {};
+    if (security_get_secret("../powerssh.key", secret, PRIVATE_SIDE, socket, type_connection, &connected_address, &control) < 0)
+    {
+        return -1;
+    }
+    
+    printf("Secret: \"%s\"\n", secret);
 
     result = rudp_send(socket, username, strlen(username), &connected_address, type_connection, &control);
     if (result < 0) return RUDP_SEND;

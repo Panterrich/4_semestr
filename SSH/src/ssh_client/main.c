@@ -12,8 +12,8 @@ int main(int argc, char* argv[])
     unsigned int bytemask = 0;
 
     in_port_t broad_port      = BROADCAST_PORT;
-    char* file_log            = NULL;
     in_addr_t addr            = 0;
+    // char* file_log            = NULL;
 
     char username[MAX_INPUT] = "";
     char address [MAX_INPUT] = "";

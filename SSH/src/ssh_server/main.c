@@ -13,8 +13,6 @@ int main(int argc, char *argv[])
     sigset_t sig = {};
     sigmask_configuration(&sig);
 
-    
-
     int signum = 0;
     siginfo_t info = {};
 

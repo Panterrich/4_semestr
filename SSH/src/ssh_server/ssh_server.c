@@ -2,6 +2,7 @@
 #include "pty.h"
 #include "rudp.h"
 #include "pam.h"
+#include "security.h"
 
 void sigchild_handler(int s)
 {
@@ -98,6 +99,18 @@ int broadcast_socket_configuration(in_addr_t address, in_port_t port)
     return server_socket;
 }
 
+//======================================================================================================================================
+
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+int exit_master_read_loop = 0;
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+void sigchld(int s)
+{
+    syslog(LOG_INFO, "ssh SIGCHLD errno = %d", errno);
+    exit_master_read_loop = 1;
+}
+
 int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 {
     if (type_connection == SOCK_STREAM)
@@ -128,6 +141,30 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
                 char buff[MAX_BUFFER] = "";
                 char slave[MAX_LEN] = "";
+
+                sigset_t mask = {};
+                sigemptyset(&mask);
+                sigaddset(&mask, SIGCHLD);
+                if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
+                {
+                    syslog(LOG_ERR, "tcp-ssh sigprocmask(), errno = %d: %s", errno, strerror(errno));
+                    return ERROR_SIGACTION;
+                }
+
+                struct sigaction sig = {.sa_handler = sigchld};
+                if (sigaction(SIGCHLD, &sig, NULL) == -1)
+                {
+                    syslog(LOG_ERR, "tcp-ssh sigaction(), errno = %d: %s", errno, strerror(errno));
+                    return ERROR_SIGACTION;                
+                }
+                
+                unsigned char secret[MAX_LEN] = {};
+                if (security_get_secret("/usr/share/powerssh/powerssh_public.key", secret, PUBLIC_SIDE, accepted_socket, SOCK_STREAM, NULL, NULL) < 0)
+                {
+                    return -1;
+                }
+                syslog(LOG_ERR, "tcp-ssh security_get_secret: \"%s\", errno = %d: %s", secret, errno, strerror(errno));
+
 
                 int master_fd = 0;
 
@@ -170,6 +207,8 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                 while (1)
                 {
+                    if (exit_master_read_loop == 1) break;
+
                     int event = poll(master, 2, 100);
                     if (event > 0)
                     {
@@ -229,6 +268,11 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     }
                 }
 
+                if (errno == EINTR) errno = 0;
+
+                rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
+                close(master_fd);
+
                 return 0;
             }
         }
@@ -263,6 +307,22 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 char buff[MAX_BUFFER] = "";
                 char slave[MAX_LEN] = "";
 
+                sigset_t mask = {};
+                sigemptyset(&mask);
+                sigaddset(&mask, SIGCHLD);
+                if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
+                {
+                    syslog(LOG_ERR, "tcp-ssh sigprocmask(), errno = %d: %s", errno, strerror(errno));
+                    return ERROR_SIGACTION;
+                }
+
+                struct sigaction sig = {.sa_handler = sigchld};
+                if (sigaction(SIGCHLD, &sig, NULL) == -1)
+                {
+                    syslog(LOG_ERR, "tcp-ssh sigaction(), errno = %d: %s", errno, strerror(errno));
+                    return ERROR_SIGACTION;                
+                }
+
                 int master_fd = 0;
 
                 char username[MAX_LEN] = "";
@@ -279,6 +339,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     if (result == -1)
                     {
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
+                        rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);
                         return -1;
                     } 
@@ -288,6 +349,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     {
                         syslog(LOG_INFO, "[PAM] set_id \"%s\" user %d, errno = %d", username, result, errno);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
+                        rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                     
                         return ERROR_SET_ID;
                     } 
@@ -306,6 +368,8 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                 while (1)
                 {
+                    if (exit_master_read_loop == 1) break;
+
                     int event = poll(master, 2, 100);
                     if (event > 0)
                     {
@@ -369,6 +433,13 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     }
                 }
 
+                if (errno == EINTR) errno = 0;
+
+                rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
+                rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
+                rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                     
+                close(master_fd);
+
                 return 0;
             }
         }
@@ -382,10 +453,6 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 }
 
 //==========================================================================================================================
-
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-int exit_master_read_loop = 0;
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 void sigusr1(int s)
 {
