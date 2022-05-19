@@ -1,6 +1,8 @@
 #ifndef LIST_H
 #define LIST_H
 
+#include <stddef.h>
+#include <stdio.h>
 typedef struct plist_t 
 {
     struct plist_t* next;
@@ -28,7 +30,7 @@ static inline void plist_add(plist_t* item, plist_t* prev, plist_t* next)
     prev->next = item;
 }
 
-static inline void plist_add_head(plist_t* item, plist* head)
+static inline void plist_add_head(plist_t* item, plist_t* head)
 {
     plist_add(item, head, head->next);
 }
@@ -83,10 +85,115 @@ static inline void plist_del_init(plist_t* item)
 	INIT_PLIST_HEAD(item);
 }
 
-static inline void plist_move(plist_t* list, plist_t* head)
+static inline void plist_move_add(plist_t* list, plist_t* head)
 {
 	plist_del_entry(list);
 	plist_add_head(list, head);
 }
+
+static inline void plist_move_tail(plist_t* list, plist_t* head)
+{
+	plist_del_entry(list);
+	plist_add_tail(list, head);
+}
+
+static inline void plist_bulk_move_tail(plist_t* head, plist_t* first, plist_t* last)
+{
+	first->prev->next = last->next;
+	last->next->prev  = first->prev;
+
+	head->prev->next = first;
+	first->prev = head->prev;
+
+	last->next = head;
+	head->prev = last;
+}
+
+static inline int plist_is_first(const plist_t* list, const plist_t* head)
+{
+	return list->prev == head;
+}
+
+static inline int plist_is_last(const plist_t* list, const plist_t* head)
+{
+	return list->next == head;
+}
+
+static inline int plist_is_head(const plist_t* list, const plist_t* head)
+{
+	return list == head;
+}
+
+static inline int plist_empty(const plist_t* head)
+{
+	return head->next == head;
+}
+
+static inline int plist_is_singular(const plist_t* head)
+{
+	return !plist_empty(head) && (head->next == head->prev);
+}
+
+static inline void plist_rotate_left(plist_t* head)
+{
+	plist_t* first = NULL;
+
+	if (!plist_empty(head)) 
+    {
+		first = head->next;
+		plist_move_tail(first, head);
+	}
+}
+
+#define container_of(ptr, type, member)                                 \
+    ({                                                                  \
+        void* tmp = (void*) ptr;                                        \
+        ((type*)((char*)(tmp) - offsetof(type, member))); \
+    })
+
+
+#define plist_entry(ptr, type, member)          \
+	container_of(ptr, type, member)
+
+#define plist_first_entry(ptr, type, member)    \
+	plist_entry((ptr)->next, type, member)
+
+#define plist_last_entry(ptr, type, member)     \
+	plist_entry((ptr)->prev, type, member)
+
+#define plist_entry_is_head(pos, head, member)  \
+	(&pos->member == (head))
+
+#define plist_next_entry(pos, member)           \
+	plist_entry((pos)->member.next, typeof(*(pos)), member)
+
+#define plist_prev_entry(pos, member)           \
+	plist_entry((pos)->member.prev, typeof(*(pos)), member)
+
+#define plist_for_each(pos, head)                                           \
+	for (pos = (head)->next; !plist_is_head(pos, (head)); pos = pos->next)
+
+#define plist_for_each_prev(pos, head)                                      \
+	for (pos = (head)->prev; !plist_is_head(pos, (head)); pos = pos->prev)
+
+
+#define plist_for_each_entry(pos, head, member)			        \
+	for (pos = plist_first_entry(head, typeof(*pos), member);	\
+	     !plist_entry_is_head(pos, head, member);			    \
+	     pos = plist_next_entry(pos, member))
+
+#define plist_for_each_entry_reverse(pos, head, member)			\
+	for (pos = plist_last_entry(head, typeof(*pos), member);	\
+	     !plist_entry_is_head(pos, head, member); 			    \
+	     pos = plist_prev_entry(pos, member))
+
+#define plist_for_each_entry_from(pos, head, member) 		    \
+	for (; !plist_entry_is_head(pos, head, member);			    \
+	     pos = plist_next_entry(pos, member))
+
+#define list_for_each_entry_from_reverse(pos, head, member)		\
+	for (; !list_entry_is_head(pos, head, member);			    \
+	     pos = list_prev_entry(pos, member))
+
 
 #endif //! LIST_H
