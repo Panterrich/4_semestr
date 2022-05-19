@@ -37,8 +37,9 @@
 #define TCP_LISTEN_PORT  34000
 #define UDP_LISTEN_PORT  33000
 
-#define DEFAULT_LOG     "/tmp/.ssh-log"
-#define DEFAULT_HISTORY "/tmp/.ssh-history"
+#define DEFAULT_LOG      "/tmp/.ssh-log"
+#define DEFAULT_HISTORY  "/tmp/.ssh-history"
+#define PRIVATE_KEY_PATH "../powerssh.key"
 
 enum ERRORS
 {

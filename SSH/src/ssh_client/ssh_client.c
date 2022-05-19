@@ -319,7 +319,8 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
         return ERROR_TCSETATTR;
     }
     
-    char buff[MAX_BUFFER] = "";
+    char     buff[MAX_BUFFER] = "";
+    char enc_buff[MAX_BUFFER] = "";
 
     struct timeval time = {.tv_sec = STANTARD_TIME};   
     int socket = rudp_socket(INADDR_ANY, 0, time, type_connection);
@@ -333,15 +334,30 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
     if (result < 0) return RUDP_CONNECT;
 
     unsigned char secret[MAX_LEN] = {};
-    if (security_get_secret("../powerssh.key", secret, PRIVATE_SIDE, socket, type_connection, &connected_address, &control) < 0)
-    {
+    int secret_size = security_get_secret(PRIVATE_KEY_PATH, secret, PRIVATE_SIDE, socket, type_connection, &connected_address, &control);
+    if (secret_size < 0)
+    {   
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) == -1)
+        {
+            perror("tcsetattr()");
+            return ERROR_TCSETATTR;
+        }
         return -1;
     }
     
-    printf("Secret: \"%s\"\n", secret);
+    RC4_KEY key = {};
+    RC4_set_key(&key, secret_size, secret);
 
-    result = rudp_send(socket, username, strlen(username), &connected_address, type_connection, &control);
+    int username_len = strlen(username);
+    char* enc_username = (char*) calloc(username_len, sizeof(char));
+    if (!enc_username) return ERROR_ALLOCATE;
+
+    RC4(&key, username_len, (unsigned char*) username, (unsigned char*) enc_username);
+
+    result = rudp_send(socket, enc_username, username_len, &connected_address, type_connection, &control);
     if (result < 0) return RUDP_SEND;
+
+    free(enc_username);
 
     struct pollfd master[2] = {{.fd = socket, .events = POLL_IN}, {.fd = STDIN_FILENO, .events = POLL_IN}};
 
@@ -357,7 +373,7 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
             {
                 if (type_connection == SOCK_STREAM)
                 {
-                    n_read = rudp_recv(socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                    n_read = rudp_recv(socket, enc_buff, sizeof(enc_buff), NULL, SOCK_STREAM, NULL);
                     if (n_read == -1)
                     {
                         perror("rudp_recv(SOCK_STREAM)");
@@ -372,7 +388,7 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                 }
                 else
                 {
-                    n_read = rudp_recv(socket, buff, sizeof(buff), &connected_address, SOCK_DGRAM, &control);
+                    n_read = rudp_recv(socket, enc_buff, sizeof(enc_buff), &connected_address, SOCK_DGRAM, &control);
                     if (n_read == -1)
                     {
                         perror("rudp_recv(SOCK_DGRAM");
@@ -394,6 +410,8 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                         break;
                     }
                 }
+
+                RC4(&key, n_read, (unsigned char*) enc_buff, (unsigned char*) buff);
 
                 n_write = write(STDOUT_FILENO, buff, n_read);
                 if (n_write == -1)
@@ -430,9 +448,11 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                     break;
                 }
                 
+                RC4(&key, n_read, (unsigned char*) buff, (unsigned char*) enc_buff);
+
                 if (type_connection == SOCK_STREAM)
                 {
-                    n_write = rudp_send(socket, buff, n_read, NULL, SOCK_STREAM, NULL);
+                    n_write = rudp_send(socket, enc_buff, n_read, NULL, SOCK_STREAM, NULL);
                     if (n_write == -1)
                     {
                         perror("rudp_send(SOCK_STREAM)");
@@ -441,7 +461,7 @@ int ssh_client(in_addr_t address, char* username, int type_connection)
                 }
                 else
                 {
-                    n_write = rudp_send(socket, buff, n_read, &connected_address, SOCK_DGRAM, &control);
+                    n_write = rudp_send(socket, enc_buff, n_read, &connected_address, SOCK_DGRAM, &control);
                     if (n_write == -1)
                     {
                         perror("rudp_send(SOCK_DGRAM");
@@ -511,7 +531,6 @@ int ssh_copy_file(in_addr_t address, char* username, char* path_src, char* path_
     strncpy(header.path,     path_dst, sizeof(header.path));
     header.mode = info_src.st_mode;
     header.size = info_src.st_size;
-
 
     char buff[MAX_BUFFER] = "";
 

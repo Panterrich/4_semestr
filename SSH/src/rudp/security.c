@@ -126,14 +126,17 @@ int security_private_decrypt_RSA(unsigned char* enc_data, int data_len, unsigned
 
 int security_get_secret(char* filename, unsigned char* secret, int type_side, int socket, int type_connection, struct sockaddr_in* connected_address, struct rudp_header* control)
 {
+    if (secret == NULL) return -1;
+
     RSA* rsa = security_create_RSA_from_file(filename, type_side);
     if (!rsa) return -1;
 
     DH* dh = DH_new();
+    if (dh == NULL) return -1;
 
     if (type_side == PRIVATE_SIDE)
     {
-        if (DH_generate_parameters_ex(dh, PRIME_LENGTH, 2, NULL) != 1)
+        if (DH_generate_parameters_ex(dh, PRIME_LENGTH, DH_GENERATOR_2, NULL) != 1)
         {
             perror("DH_generate_parameters_ex()");
 
@@ -141,10 +144,18 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
         
-        int errflags = 0;
+        int errflags = -1;
         if (DH_check(dh, &errflags) != 1)
         {
             perror("DH_check()");
+
+            DH_free(dh);
+            return -1;
+        }
+
+        if (errflags != 0)
+        {
+            perror("[DH_check] errflags");
 
             DH_free(dh);
             return -1;
@@ -173,8 +184,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
         BN_bn2bin(g,       priv_header.g_buff);
         BN_bn2bin(pub_key, priv_header.pub_key_buff);
         
-        int result = RSA_private_encrypt(PRIME_LENGTH, priv_header.p_buff, enc_priv_header.p_buff, rsa, padding);
-        if (result == -1)
+        int p_length = RSA_private_encrypt(BN_num_bytes(p), priv_header.p_buff, enc_priv_header.p_buff, rsa, padding);
+        if (p_length == -1)
         {
             perror("RSA_private_encrypt()");
 
@@ -182,8 +193,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = RSA_private_encrypt(PRIME_LENGTH, priv_header.g_buff, enc_priv_header.g_buff, rsa, padding);
-        if (result == -1)
+        int g_length = RSA_private_encrypt(BN_num_bytes(g), priv_header.g_buff, enc_priv_header.g_buff, rsa, padding);
+        if (g_length == -1)
         {
             perror("RSA_private_encrypt()");
 
@@ -191,8 +202,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = RSA_private_encrypt(PRIME_LENGTH, priv_header.pub_key_buff, enc_priv_header.pub_key_buff, rsa, padding);
-        if (result == -1)
+        int pub_key_length = RSA_private_encrypt(BN_num_bytes(pub_key), priv_header.pub_key_buff, enc_priv_header.pub_key_buff, rsa, padding);
+        if (pub_key_length == -1)
         {
             perror("RSA_private_encrypt()");
 
@@ -200,7 +211,11 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = rudp_send(socket, &enc_priv_header, sizeof(struct DH_header_private), connected_address, type_connection, control);
+        enc_priv_header.p_length = p_length;
+        enc_priv_header.g_length = g_length;
+        enc_priv_header.pub_key_length = pub_key_length;
+
+        int result = rudp_send(socket, &enc_priv_header, sizeof(struct DH_header_private), connected_address, type_connection, control);
         if (result < 0)
         {
             perror("rudp_send()");
@@ -222,8 +237,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = RSA_private_decrypt(RSA_SIZE, enc_pub_header.pub_key_buff, pub_header.pub_key_buff, rsa, padding);
-        if (result == -1)
+        int decrypted_symb = RSA_private_decrypt(enc_pub_header.pub_key_length, enc_pub_header.pub_key_buff, pub_header.pub_key_buff, rsa, padding);
+        if (decrypted_symb == -1)
         {
             perror("RSA_private_deccrypt()");
 
@@ -232,9 +247,10 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
         }
 
         BIGNUM* second_pub_key_bn = BN_new();
-        second_pub_key_bn = BN_bin2bn(pub_header.pub_key_buff, PRIME_LENGTH, second_pub_key_bn);
+        second_pub_key_bn = BN_bin2bn(pub_header.pub_key_buff, decrypted_symb, second_pub_key_bn);
 
-        if (DH_compute_key(secret, second_pub_key_bn, dh) != 1)
+        int secret_size = DH_compute_key(secret, second_pub_key_bn, dh);
+        if (secret_size == -1)
         {
             perror("DH_compute_key()");
 
@@ -245,7 +261,7 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
 
         DH_free(dh);
         BN_free(second_pub_key_bn);
-        return 0;
+        return secret_size;
     }
     else if (type_side == PUBLIC_SIDE)
     {      
@@ -261,8 +277,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = RSA_public_decrypt(RSA_SIZE, enc_priv_header.p_buff, priv_header.p_buff, rsa, padding);
-        if (result == -1)
+        int p_length = RSA_public_decrypt(enc_priv_header.p_length, enc_priv_header.p_buff, priv_header.p_buff, rsa, padding);
+        if (p_length == -1)
         {
             perror("RSA_public_deccrypt()");
 
@@ -270,8 +286,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = RSA_public_decrypt(RSA_SIZE, enc_priv_header.g_buff, priv_header.g_buff, rsa, padding);
-        if (result == -1)
+        int g_length = RSA_public_decrypt(enc_priv_header.g_length, enc_priv_header.g_buff, priv_header.g_buff, rsa, padding);
+        if (g_length == -1)
         {
             perror("RSA_public_deccrypt()");
 
@@ -279,7 +295,7 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             return -1;
         }
 
-        result = RSA_public_decrypt(RSA_SIZE, enc_priv_header.pub_key_buff, priv_header.pub_key_buff, rsa, padding);
+        int pub_key_length = RSA_public_decrypt(enc_priv_header.pub_key_length, enc_priv_header.pub_key_buff, priv_header.pub_key_buff, rsa, padding);
         if (result == -1)
         {
             perror("RSA_public_deccrypt()");
@@ -292,9 +308,9 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
         BIGNUM* g   = BN_new();
         BIGNUM* key = BN_new();
 
-        p   = BN_bin2bn(priv_header.p_buff,       PRIME_LENGTH, p);
-        g   = BN_bin2bn(priv_header.g_buff,       PRIME_LENGTH, g);
-        key = BN_bin2bn(priv_header.pub_key_buff, PRIME_LENGTH, key);
+        p   = BN_bin2bn(priv_header.p_buff,       p_length, p);
+        g   = BN_bin2bn(priv_header.g_buff,       g_length, g);
+        key = BN_bin2bn(priv_header.pub_key_buff, pub_key_length, key);
         
         if (DH_set0_pqg(dh, p, NULL, g) != 1)
         {
@@ -306,7 +322,7 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
         }
 
         syslog(LOG_NOTICE, "[SECURITY] WHO %s\n", ERR_reason_error_string(ERR_get_error()));
-        int errflags = 0;
+        int errflags = -1;
         if (DH_check(dh, &errflags) != 1)
         {
             syslog(LOG_NOTICE, "[SECURITY] @@@@@@ %s", ERR_reason_error_string(ERR_get_error()));
@@ -339,8 +355,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
 
         BN_bn2bin(pub_key, pub_header.pub_key_buff);
         
-        result = RSA_public_encrypt(sizeof(struct DH_header_public), (unsigned char*) &pub_header, (unsigned char*) &enc_pub_header, rsa, padding);
-        if (result == -1)
+        pub_key_length = RSA_public_encrypt(BN_num_bytes(pub_key), (unsigned char*) &pub_header, (unsigned char*) &enc_pub_header, rsa, padding);
+        if (pub_key_length == -1)
         {
             perror("RSA_public_encrypt()");
 
@@ -348,6 +364,8 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             BN_free(key);
             return -1;
         }
+
+        enc_pub_header.pub_key_length = pub_key_length;
 
         syslog(LOG_NOTICE, "[SECURITY] 4 \n");
 
@@ -360,8 +378,9 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
             BN_free(key);
             return -1;
         }
-
-        if (DH_compute_key(secret, key, dh) != 1)
+        
+        int secret_size = DH_compute_key(secret, key, dh);
+        if (secret_size == -1)
         {
             perror("DH_compute_key()");
 
@@ -372,7 +391,7 @@ int security_get_secret(char* filename, unsigned char* secret, int type_side, in
 
         DH_free(dh);
         BN_free(key);
-        return 0;
+        return secret_size;
     }
     else
     {

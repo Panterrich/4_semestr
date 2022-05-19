@@ -36,6 +36,8 @@
 #define BROADCAST_PORT   35000
 #define COPY_LISTEN_PORT 36000
 
+#define PUBLIC_KEY_PATH "/usr/share/powerssh/powerssh_public.key"
+
 //============================================================================================
 
 

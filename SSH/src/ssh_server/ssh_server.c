@@ -139,8 +139,12 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
             {   
                 syslog(LOG_ERR, "[RUDP] after accept pid = %d, errno = %d", getpid(), errno);
                 syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
-                char buff[MAX_BUFFER] = "";
+                
                 char slave[MAX_LEN] = "";
+
+                char enc_buff[MAX_BUFFER] = "";
+                char     buff[MAX_BUFFER] = "";
+
 
                 sigset_t mask = {};
                 sigemptyset(&mask);
@@ -159,18 +163,25 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 }
                 
                 unsigned char secret[MAX_LEN] = {};
-                if (security_get_secret("/usr/share/powerssh/powerssh_public.key", secret, PUBLIC_SIDE, accepted_socket, SOCK_STREAM, NULL, NULL) < 0)
+                int secret_size = security_get_secret(PUBLIC_KEY_PATH, secret, PUBLIC_SIDE, accepted_socket, SOCK_STREAM, NULL, NULL);
+                if (secret_size < 0)
                 {
                     return -1;
                 }
-                syslog(LOG_ERR, "tcp-ssh security_get_secret: \"%s\", errno = %d: %s", secret, errno, strerror(errno));
-
+                syslog(LOG_NOTICE, "tcp-ssh security_get_secret(), errno = %d: %s", errno, strerror(errno));
+                
+                RC4_KEY key = {};
+                RC4_set_key(&key, secret_size, secret);
 
                 int master_fd = 0;
 
-                char username[MAX_LEN] = "";
-                int result = rudp_recv(accepted_socket, username, MAX_LEN - 1, NULL, SOCK_STREAM, NULL);
+                char enc_username[MAX_LEN] = "";
+                char     username[MAX_LEN] = "";
+
+                int result = rudp_recv(accepted_socket, enc_username, MAX_LEN - 1, NULL, SOCK_STREAM, NULL);
                 if (result < 0) return RUDP_RECV;
+
+                RC4(&key, result, (unsigned char*) enc_username, (unsigned char*) username);
 
                 pid_t pid = pty_fork(&master_fd, slave, MAX_LEN, NULL, NULL);
                 if (pid < 0) syslog(LOG_ERR, "[RUDP] pty_fork pid = %d, errno = %d", pid, errno);
@@ -240,8 +251,9 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                             syslog(LOG_INFO, "[RUDP] server read errno = %d", errno);
 
+                            RC4(&key, n_read, (unsigned char*) buff, (unsigned char*) enc_buff);
                             
-                            n_write = rudp_send(accepted_socket, buff, n_read, NULL, SOCK_STREAM, NULL);
+                            n_write = rudp_send(accepted_socket, enc_buff, n_read, NULL, SOCK_STREAM, NULL);
                             if (n_write == -1)
                             {
                                 perror("rudp_recv(SOCK_STREAM)");
@@ -253,7 +265,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         
                         if (master[1].revents == POLL_IN)
                         {
-                            n_read = rudp_recv(accepted_socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
+                            n_read = rudp_recv(accepted_socket, enc_buff, sizeof(enc_buff), NULL, SOCK_STREAM, NULL);
                             if (n_read == -1)
                             {
                                 perror("rudp_send(SOCK_STREAM)");
@@ -267,6 +279,8 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                                 return 1;             
                             }
                             syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
+
+                            RC4(&key, n_read, (unsigned char*) enc_buff, (unsigned char*) buff);
 
                             n_write = write(master_fd, buff, n_read);
                             if (n_write == -1)
@@ -321,8 +335,10 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
                 syslog(LOG_INFO, "[RUDP] server %s:%d errno = %d: %s", inet_ntoa(client.sin_addr), ntohs(client.sin_port), errno, strerror(errno));
 
-                char buff[MAX_BUFFER] = "";
                 char slave[MAX_LEN] = "";
+
+                char enc_buff[MAX_BUFFER] = "";
+                char     buff[MAX_BUFFER] = "";
 
                 sigset_t mask = {};
                 sigemptyset(&mask);
@@ -340,11 +356,26 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     return ERROR_SIGACTION;                
                 }
 
+                unsigned char secret[MAX_LEN] = {};
+                int secret_size = security_get_secret(PUBLIC_KEY_PATH, secret, PUBLIC_SIDE, accepted_socket, SOCK_DGRAM, &client, &control);
+                if (secret_size < 0)
+                {
+                    return -1;
+                }
+                syslog(LOG_NOTICE, "tcp-ssh security_get_secret(), errno = %d: %s", errno, strerror(errno));
+                
+                RC4_KEY key = {};
+                RC4_set_key(&key, secret_size, secret);
+
                 int master_fd = 0;
 
-                char username[MAX_LEN] = "";
-                int result = rudp_recv(accepted_socket, username, MAX_LEN - 1, &client, SOCK_DGRAM, &control);
+                char enc_username[MAX_LEN] = "";
+                char     username[MAX_LEN] = "";
+
+                int result = rudp_recv(accepted_socket, enc_username, MAX_LEN - 1, &client, SOCK_DGRAM, &control);
                 if (result < 0) return RUDP_RECV;
+
+                RC4(&key, result, (unsigned char*) enc_username, (unsigned char*) username);
 
                 pid_t pid = pty_fork(&master_fd, slave, MAX_LEN, NULL, NULL);
                 if (pid < 0) syslog(LOG_ERR, "[RUDP] pty_fork pid = %d, errno = %d", pid, errno);
@@ -419,8 +450,9 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                             syslog(LOG_INFO, "[RUDP] server read errno = %d: %s", errno, strerror(errno));
 
-                            
-                            n_write = rudp_send(accepted_socket, buff, n_read, &client, SOCK_DGRAM, &control);
+                            RC4(&key, n_read, (unsigned char*) buff, (unsigned char*) enc_buff);
+
+                            n_write = rudp_send(accepted_socket, enc_buff, n_read, &client, SOCK_DGRAM, &control);
                             if (n_write == -1)
                             {
                                 perror("rudp_recv(SOCK_STREAM)");
@@ -432,7 +464,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                         if (master[1].revents == POLL_IN)
                         {
-                            n_read = rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
+                            n_read = rudp_recv(accepted_socket, enc_buff, sizeof(enc_buff), &client, SOCK_DGRAM, &control);
                             buff[n_read] = '\0';
                             syslog(LOG_INFO, "[RUDP] server recv %d \"%s\" errno = %d", n_read, buff, errno);
                             if (n_read == -1)
@@ -448,6 +480,8 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                                 return 1;
                             }
                            
+                            RC4(&key, n_read, (unsigned char*) enc_buff, (unsigned char*) buff);
+
                             n_write = write(master_fd, buff, n_read);
                             if (n_write == -1)
                             {

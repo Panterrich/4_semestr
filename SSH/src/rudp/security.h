@@ -9,7 +9,7 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/bn.h>
-
+#include <openssl/rc4.h>
 
 enum TYPE_SIDE 
 {
@@ -30,7 +30,7 @@ enum SECURITY_ERROR
     SECURITY_UNKNOWN_SIDE = -1,
 };
 
-#define PRIME_LENGTH 200
+#define PRIME_LENGTH 1024
 #define RSA_SIZE     256
 
 struct DH_header_private
@@ -38,11 +38,16 @@ struct DH_header_private
     unsigned char p_buff      [RSA_SIZE];
     unsigned char g_buff      [RSA_SIZE];
     unsigned char pub_key_buff[RSA_SIZE];
+
+    int p_length;
+    int g_length;
+    int pub_key_length;
 };
 
 struct DH_header_public
 {
     unsigned char pub_key_buff[RSA_SIZE];
+    int pub_key_length;
 };
 
 
