@@ -101,7 +101,6 @@ void sigmask_configuration(sigset_t *wait)
     sigaddset(wait, SIGQUIT);
     sigaddset(wait, SIGCHLD);
     sigaddset(wait, SIGHUP);
-    sigaddset(wait, SIGINT);
 
     if (sigprocmask(SIG_BLOCK, wait, NULL) == -1)
     {

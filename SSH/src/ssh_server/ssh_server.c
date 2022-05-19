@@ -148,6 +148,22 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         return -1;
                     } 
 
+                    result = add_pid_power_cgroup(getpid());
+                    if (result == -1)
+                    {
+                        syslog(LOG_INFO, "[CGROUP] add_pid_power_cgroup(), errno = %d", errno);
+                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                        return ERROR_CGROUP;
+                    }
+
+                    result = unshare(CLONE_NEWIPC);
+                    if (result == -1)
+                    {
+                        syslog(LOG_INFO, "[NAMESPACES] unshare(), errno = %d", errno);
+                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                        return ERROR_UNSHARE;
+                    }
+
                     result = set_id(username);
                     if (result == -1)
                     {
@@ -155,6 +171,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
                         return ERROR_SET_ID;
                     } 
+
 
                     char* bash_argv[] = {"bash", NULL};
                     execvp("bash", bash_argv);
@@ -283,6 +300,24 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         return -1;
                     } 
 
+                    result = add_pid_power_cgroup(getpid());
+                    if (result == -1)
+                    {
+                        syslog(LOG_INFO, "[CGROUP] add_pid_power_cgroup(), errno = %d", errno);
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                        
+                        return ERROR_CGROUP;
+                    }
+
+                    result = unshare(CLONE_NEWIPC);
+                    if (result == -1)
+                    {
+                        syslog(LOG_INFO, "[NAMESPACES] unshare(), errno = %d", errno);
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                          
+                        return ERROR_UNSHARE;
+                    } 
+
                     result = set_id(username);
                     if (result == -1)
                     {
@@ -290,7 +325,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                     
                         return ERROR_SET_ID;
-                    } 
+                    }
 
                     syslog(LOG_INFO, "[RUDP] server bash errno = %d", errno);
                     char* bash_argv[] = {"bash", NULL};
@@ -379,6 +414,40 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
     {
         return RUDP_UNDEFINED_TYPE;
     }
+}
+
+int add_pid_power_cgroup(pid_t pid)
+{
+    static const char* POWER_CGROUP_DIR   = "/sys/fs/cgroup/powerssh";
+    static const char* POWER_CGROUP_PROCS = "/sys/fs/cgroup/powerssh/cgroup.procs";
+
+    DIR* dir = opendir(POWER_CGROUP_DIR);
+    if (dir)
+    {
+        closedir(dir);
+    }
+    else if (errno == ENOENT)
+    {
+        int result = mkdir(POWER_CGROUP_DIR, 0755);
+        if (result == -1) return -1;
+    }
+    else
+    {
+        return -1;
+    }
+
+    int fd = open(POWER_CGROUP_PROCS, O_RDWR);
+    if (fd == -1) return -1;
+
+    char buffer[MAX_INPUT] = {};
+    sprintf(buffer, "%ld\n", (long) pid);
+
+    int len = write(fd, buffer, strlen(buffer));
+    
+    close(fd);
+
+    if (len == -1) return -1;
+    return 0;
 }
 
 //==========================================================================================================================
