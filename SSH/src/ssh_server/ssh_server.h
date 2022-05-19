@@ -23,6 +23,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sched.h>
 #include <poll.h>
 
 //============================================================================================
@@ -34,7 +35,6 @@
 #define TCP_LISTEN_PORT  34000
 #define BROADCAST_PORT   35000
 #define COPY_LISTEN_PORT 36000
-
 
 //============================================================================================
 
@@ -57,6 +57,8 @@ enum ERRORS
     ERROR_SET_ID          = -14,
     ERROR_OPEN            = -15,
     ERROR_LOGIN           = -16,
+    ERROR_UNSHARE         = -17,
+    ERROR_CGROUP          = -18,
 };
 
 void sigchild_handler(int s);
@@ -68,5 +70,7 @@ int broadcast_socket_configuration(in_addr_t address, in_port_t port);
 int ssh_server(in_addr_t address, in_port_t port, int type_connection);
 
 int copy_server(in_addr_t address, in_port_t port);
+
+int add_pid_power_cgroup(pid_t pid);
 
 #endif // SSH_SERVER_H
