@@ -20,10 +20,10 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
 
     struct sockaddr_in client = {};
     socklen_t client_len = sizeof(client);
-    
+
     char buffer[MAX_LEN] = "";
 
-    syslog(LOG_INFO, "broadcast is recieving");
+    syslog(LOG_INFO, "broadcast is receiving");
 
     while (1)
     {
@@ -41,7 +41,9 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
 
         buffer[len] = '\0';
 
-        syslog(LOG_NOTICE, "broadcast message received from %s:%d :: %s\n", inet_ntoa(((struct sockaddr_in*)&client)->sin_addr), ntohs(((struct sockaddr_in*)&client)->sin_port), buffer);
+        syslog(LOG_NOTICE, "broadcast message received from %s:%d :: %s\n",
+               inet_ntoa(((struct sockaddr_in*)&client)->sin_addr),
+               ntohs(((struct sockaddr_in*)&client)->sin_port), buffer);
 
         if (strcmp(buffer, "Hi, POWER!") == 0)
         {
@@ -58,7 +60,7 @@ int broadcast_server_udp_interface(in_addr_t address_server, in_port_t broadcast
     }
 
     syslog(LOG_WARNING, "broadcast socket close");
-    
+
     close(server_socket);
 
     return 0;
@@ -136,10 +138,10 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
             if (accepted_socket < 0) return RUDP_ACCEPT;
 
             if (accepted_socket > 0)
-            {   
+            {
                 syslog(LOG_ERR, "[RUDP] after accept pid = %d, errno = %d", getpid(), errno);
                 syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
-                
+
                 char slave[MAX_LEN] = "";
 
                 char enc_buff[MAX_BUFFER] = "";
@@ -159,9 +161,9 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 if (sigaction(SIGCHLD, &sig, NULL) == -1)
                 {
                     syslog(LOG_ERR, "tcp-ssh sigaction(), errno = %d: %s", errno, strerror(errno));
-                    return ERROR_SIGACTION;                
+                    return ERROR_SIGACTION;
                 }
-                
+
                 unsigned char secret[MAX_LEN] = {};
                 int secret_size = security_get_secret(PUBLIC_KEY_PATH, secret, PUBLIC_SIDE, accepted_socket, SOCK_STREAM, NULL, NULL);
                 if (secret_size < 0)
@@ -169,7 +171,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     return -1;
                 }
                 syslog(LOG_NOTICE, "tcp-ssh security_get_secret(), errno = %d: %s", errno, strerror(errno));
-                
+
                 RC4_KEY key = {};
                 RC4_set_key(&key, secret_size, secret);
 
@@ -189,18 +191,18 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 {
                     result = login_into_user(username);
                     syslog(LOG_INFO, "[RUDP] server login into \"%s\" user %d, errno = %d", username, result, errno);
-                    
+
                     if (result == -1)
                     {
                         rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                         return -1;
-                    } 
+                    }
 
                     result = add_pid_power_cgroup(getpid());
                     if (result == -1)
                     {
                         syslog(LOG_INFO, "[CGROUP] add_pid_power_cgroup(), errno = %d", errno);
-                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                         return ERROR_CGROUP;
                     }
 
@@ -208,7 +210,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     if (result == -1)
                     {
                         syslog(LOG_INFO, "[NAMESPACES] unshare(), errno = %d", errno);
-                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                         return ERROR_UNSHARE;
                     }
 
@@ -216,9 +218,9 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     if (result == -1)
                     {
                         syslog(LOG_INFO, "[PAM] set_id \"%s\" user %d, errno = %d", username, result, errno);
-                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                        rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                         return ERROR_SET_ID;
-                    } 
+                    }
 
 
                     char* bash_argv[] = {"bash", NULL};
@@ -227,7 +229,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     return -1;
                 }
 
-               
+
                 struct pollfd master[2] = {{.fd = master_fd, .events = POLL_IN}, {.fd = accepted_socket, .events = POLL_IN}};
 
                 size_t n_write = 0;
@@ -252,7 +254,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                             syslog(LOG_INFO, "[RUDP] server read errno = %d", errno);
 
                             RC4(&key, n_read, (unsigned char*) buff, (unsigned char*) enc_buff);
-                            
+
                             n_write = rudp_send(accepted_socket, enc_buff, n_read, NULL, SOCK_STREAM, NULL);
                             if (n_write == -1)
                             {
@@ -262,7 +264,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                             syslog(LOG_INFO, "[RUDP] server send errno = %d", errno);
                         }
-                        
+
                         if (master[1].revents == POLL_IN)
                         {
                             n_read = rudp_recv(accepted_socket, enc_buff, sizeof(enc_buff), NULL, SOCK_STREAM, NULL);
@@ -276,7 +278,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                                 syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
                                 rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                                 kill(pid, SIGKILL);
-                                return 1;             
+                                return 1;
                             }
                             syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
 
@@ -287,7 +289,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                             {
                                 perror("write()");
                                 return -1;
-                            }     
+                            }
 
                             syslog(LOG_INFO, "[RUDP] server write errno = %d", errno);
                         }
@@ -330,7 +332,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
             if (accepted_socket < 0) return RUDP_ACCEPT;
 
             if (accepted_socket > 0)
-            {   
+            {
                 syslog(LOG_ERR, "[RUDP] after accept pid = %d, errno = %d", getpid(), errno);
                 syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
                 syslog(LOG_INFO, "[RUDP] server %s:%d errno = %d: %s", inet_ntoa(client.sin_addr), ntohs(client.sin_port), errno, strerror(errno));
@@ -353,7 +355,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 if (sigaction(SIGCHLD, &sig, NULL) == -1)
                 {
                     syslog(LOG_ERR, "tcp-ssh sigaction(), errno = %d: %s", errno, strerror(errno));
-                    return ERROR_SIGACTION;                
+                    return ERROR_SIGACTION;
                 }
 
                 unsigned char secret[MAX_LEN] = {};
@@ -363,7 +365,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     return -1;
                 }
                 syslog(LOG_NOTICE, "tcp-ssh security_get_secret(), errno = %d: %s", errno, strerror(errno));
-                
+
                 RC4_KEY key = {};
                 RC4_set_key(&key, secret_size, secret);
 
@@ -383,21 +385,21 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                 {
                     result = login_into_user(username);
                     syslog(LOG_INFO, "[RUDP] server login into \"%s\" user %d, errno = %d", username, result, errno);
-                    
+
                     if (result == -1)
                     {
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
                         rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);
                         return -1;
-                    } 
+                    }
 
                     result = add_pid_power_cgroup(getpid());
                     if (result == -1)
                     {
                         syslog(LOG_INFO, "[CGROUP] add_pid_power_cgroup(), errno = %d", errno);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
-                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                        
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);
                         return ERROR_CGROUP;
                     }
 
@@ -406,9 +408,9 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                     {
                         syslog(LOG_INFO, "[NAMESPACES] unshare(), errno = %d", errno);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
-                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                          
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);
                         return ERROR_UNSHARE;
-                    } 
+                    }
 
                     result = set_id(username);
                     if (result == -1)
@@ -416,7 +418,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                         syslog(LOG_INFO, "[PAM] set_id \"%s\" user %d, errno = %d", username, result, errno);
                         rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
                         rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
-                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                     
+                        rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);
                         return ERROR_SET_ID;
                     }
 
@@ -479,7 +481,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                                 kill(pid, SIGKILL);
                                 return 1;
                             }
-                           
+
                             RC4(&key, n_read, (unsigned char*) enc_buff, (unsigned char*) buff);
 
                             n_write = write(master_fd, buff, n_read);
@@ -487,7 +489,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
                             {
                                 perror("write()");
                                 return -1;
-                            }     
+                            }
 
                             syslog(LOG_INFO, "[RUDP] server write errno = %d", errno);
                         }
@@ -506,7 +508,7 @@ int ssh_server(in_addr_t address, in_port_t port, int type_connection)
 
                 rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 1);
                 rudp_recv(accepted_socket, buff, sizeof(buff), &client, SOCK_DGRAM, &control);
-                rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);                     
+                rudp_close(accepted_socket, SOCK_DGRAM, &client, &control, 3);
                 close(master_fd);
 
                 return 0;
@@ -548,7 +550,7 @@ int add_pid_power_cgroup(pid_t pid)
     sprintf(buffer, "%ld\n", (long) pid);
 
     int len = write(fd, buffer, strlen(buffer));
-    
+
     close(fd);
 
     if (len == -1) return -1;
@@ -587,7 +589,7 @@ int copy_server(in_addr_t address, in_port_t port)
         if (accepted_socket < 0) return RUDP_ACCEPT;
 
         if (accepted_socket > 0)
-        {   
+        {
             syslog(LOG_ERR, "[RUDP] after accept pid = %d, errno = %d", getpid(), errno);
             syslog(LOG_NOTICE, "daemon POWER[%d] accepted", getpid());
             char buff[MAX_BUFFER] = "";
@@ -607,7 +609,7 @@ int copy_server(in_addr_t address, in_port_t port)
             if (sigaction(SIGUSR1, &sig, NULL) == -1)
             {
                 syslog(LOG_ERR, "copy_server sigaction(), errno = %d: %s", errno, strerror(errno));
-                return ERROR_SIGACTION;                
+                return ERROR_SIGACTION;
             }
 
             struct file_copy_header header = {};
@@ -624,12 +626,12 @@ int copy_server(in_addr_t address, in_port_t port)
             {
                 result = login_into_user(header.username);
                 syslog(LOG_INFO, "[RUDP] server login into \"%s\" user %d, errno = %d", header.username, result, errno);
-                
+
                 if (result == -1)
                 {
                     rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                     return ERROR_LOGIN;
-                } 
+                }
 
                 kill(getppid(), SIGUSR1);
 
@@ -637,15 +639,15 @@ int copy_server(in_addr_t address, in_port_t port)
                 if (result == -1)
                 {
                     syslog(LOG_INFO, "[PAM] set_id \"%s\" user %d, errno = %d", header.username, result, errno);
-                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                     return ERROR_SET_ID;
-                } 
+                }
 
                 int fd = open(header.path, O_WRONLY | O_CREAT | O_LARGEFILE | O_TRUNC, header.mode);
                 if (fd == -1)
                 {
                     syslog(LOG_INFO, "[COPY] open, errno = %d: %s", errno, strerror(errno));
-                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);                        
+                    rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                     return ERROR_OPEN;
                 }
 
@@ -674,9 +676,9 @@ int copy_server(in_addr_t address, in_port_t port)
                     {
                         syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
                         rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
-                        return 1;             
+                        return 1;
                     }
-                    
+
                     syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
 
                     int n_write = write(fd, buff, n_read);
@@ -689,12 +691,12 @@ int copy_server(in_addr_t address, in_port_t port)
                     size += n_write;
                     if (size == header.size) break;
                 }
-                
+
                 rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                 return 0;
             }
 
-            
+
             struct pollfd master[2] = {{.fd = master_fd, .events = POLL_IN}, {.fd = accepted_socket, .events = POLL_IN}};
 
             size_t n_write = 0;
@@ -718,7 +720,7 @@ int copy_server(in_addr_t address, in_port_t port)
 
                         syslog(LOG_INFO, "[RUDP] server read errno = %d", errno);
 
-                        
+
                         n_write = rudp_send(accepted_socket, buff, n_read, &client, SOCK_STREAM, NULL);
                         if (n_write == -1)
                         {
@@ -728,7 +730,7 @@ int copy_server(in_addr_t address, in_port_t port)
 
                         syslog(LOG_INFO, "[RUDP] server send errno = %d", errno);
                     }
-                    
+
                     if (master[1].revents == POLL_IN)
                     {
                         n_read = rudp_recv(accepted_socket, buff, sizeof(buff), NULL, SOCK_STREAM, NULL);
@@ -742,7 +744,7 @@ int copy_server(in_addr_t address, in_port_t port)
                             syslog(LOG_INFO, "[RUDP] client was shutdowned, errno = %d", errno);
                             rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
                             kill(pid, SIGKILL);
-                            return 1;             
+                            return 1;
                         }
                         syslog(LOG_INFO, "[RUDP] server recv errno = %d", errno);
 
@@ -751,7 +753,7 @@ int copy_server(in_addr_t address, in_port_t port)
                         {
                             perror("write()");
                             return -1;
-                        }     
+                        }
 
                         syslog(LOG_INFO, "[RUDP] server write errno = %d", errno);
                     }
@@ -767,7 +769,7 @@ int copy_server(in_addr_t address, in_port_t port)
             syslog(LOG_INFO, "copy_server is waiting for the file transmission to finish. errno = %d", errno);
             kill(pid, SIGUSR1);
 
-            waitpid(pid, NULL, 0);  
+            waitpid(pid, NULL, 0);
 
             rudp_close(accepted_socket, SOCK_STREAM, NULL, NULL, 0);
             return 0;
